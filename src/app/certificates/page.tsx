@@ -97,13 +97,18 @@ export default function CertificatesPage() {
           setLoading(false);
         }
       } else {
+        // If connected but userId not yet fetched, keep loading
+        if (connected) {
+            // Do nothing, wait for userId to update
+            return;
+        }
         setLoading(false);
         setError("Please connect your wallet to view your certificates.");
       }
     };
 
     fetchCertificates();
-  }, [userId, certificateId]);
+  }, [userId, certificateId, connected]); // Added connected to dependencies
 
   const mintCertificate = async () => {
     if (!userId || !moduleId) {

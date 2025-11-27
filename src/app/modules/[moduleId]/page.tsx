@@ -7,7 +7,6 @@ import { startModule, completeLesson, completeModule } from '@/lib/firebase/prog
 import { getUserProgress, checkContentAccess, grantContentAccess, getAccessDetails } from '@/lib/firebase/access';
 import { Spinner, Alert, Container, Row, Col, Card, Button, ListGroup, ProgressBar, Modal } from 'react-bootstrap';
 import { Module, Lesson, UserProgress, Certificate } from '@/types';
-import { Module, Lesson, UserProgress, Certificate } from '@/types';
 
 
 import { initiateEscrow } from '@/lib/cardano/escrow';
