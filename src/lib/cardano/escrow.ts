@@ -220,7 +220,7 @@ export const claimFunds = async ({
 
   // Filter out the chosen collateral UTXO from the list for selectUtxosFrom
   const nonCollateralUtxos = walletUtxos.filter(
-    (utxo) => utxo !== collateralUtxo
+    (utxo: UTxO) => utxo !== collateralUtxo
   );
   
   console.log("Claiming funds as mentor:", mentorAddr);
