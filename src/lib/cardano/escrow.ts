@@ -266,17 +266,19 @@ export const claimFunds = async ({
     typeof value === 'bigint' ? value.toString() : value
   ));
   console.log("Script CBOR (Unwrapped used):", unwrappedScriptCbor.substring(0, 50) + "...");
-  console.log("--- ClaimFunds V26-DoubleWrap START ---");
+  console.log("--- ClaimFunds V27-DoubleWrapRetry START ---");
   
-  // Helper to wrap in CBOR ByteString
+  // Helper to wrap in CBOR ByteString (Major Type 2)
+  // originalPlutusScriptCbor is already a ByteString (59 04 62 ...).
+  // We wrap it AGAIN to counter-act Mesh stripping one layer.
   const wrapCbor = (hex: string) => {
     const length = hex.length / 2;
-    const lengthHex = length.toString(16).padStart(4, '0');
+    const lengthHex = length.toString(16).padStart(4, '0'); // 2 bytes length
     return "59" + lengthHex + hex;
   };
 
   const doubleWrapped = wrapCbor(originalPlutusScriptCbor);
-  console.log("Double Wrapped Script CBOR:", doubleWrapped.substring(0, 50) + "...");
+  console.log("Double Wrapped Script CBOR (Prefix):", doubleWrapped.substring(0, 50) + "...");
 
   tx.spendingPlutusScriptV3() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
