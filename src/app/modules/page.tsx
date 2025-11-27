@@ -66,7 +66,7 @@ export default function ModulesPage() {
                   <span className="text-muted small">Duration: {module.estimatedDuration}</span>
                   <span className={`badge ${
                     module.difficulty === 'Basic' ? 'bg-success' :
-                    module.difficulty === 'Intermediate' ? 'bg-warning text-dark' :
+                    module.difficulty === 'Menengah' ? 'bg-warning text-dark' :
                     'bg-danger'
                   }`}>{module.difficulty}</span>
                 </div>
