@@ -268,7 +268,7 @@ export const claimFunds = async ({
 
   tx.spendingPlutusScriptV3() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
-    .txInScript(unwrappedScriptCbor) 
+    .txInScript(originalPlutusScriptCbor) 
     .txInRedeemerValue(redeemerDataSafe) 
     .txInInlineDatumPresent(); 
 
