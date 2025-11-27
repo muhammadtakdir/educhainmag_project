@@ -209,7 +209,7 @@ export const claimFunds = async ({
   // Explicitly select a collateral UTXO
   const collateralAmount = 5_000_000; // 5 ADA (in Lovelace)
   const collateralUtxo = walletUtxos.find(
-    (utxo) => Number(utxo.output.amount[0].quantity) >= collateralAmount && utxo.output.amount.length === 1 // Ensure it's just ADA, no tokens
+    (utxo: UTxO) => Number(utxo.output.amount[0].quantity) >= collateralAmount && utxo.output.amount.length === 1 // Ensure it's just ADA, no tokens
   );
 
   if (!collateralUtxo) {
