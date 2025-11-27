@@ -272,15 +272,13 @@ export const claimFunds = async ({
     .txInRedeemerValue(redeemerDataSafe) 
     .txInInlineDatumPresent(); 
 
-  // Remove explicit collateral (Mesh handles it)
-  /*
+  // Explicitly add collateral
   tx.txInCollateral(
     collateralUtxo.input.txHash,
     collateralUtxo.input.outputIndex,
     collateralUtxo.output.amount,
     collateralUtxo.output.address
   );
-  */
 
   // Logic for Outputs
   if (action === "PartialClaim") {
