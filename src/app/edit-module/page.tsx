@@ -79,10 +79,20 @@ export default function EditModulePage() {
 
     setLoading(true);
     try {
+      // Map English difficulty back to Indonesian for the database
+      const reverseMappedDifficulty = (diff: 'Beginner' | 'Intermediate' | 'Advanced'): "Basic" | "Menengah" | "Mahir" => {
+        switch (diff) {
+          case "Beginner": return "Basic";
+          case "Intermediate": return "Menengah";
+          case "Advanced": return "Mahir";
+          default: return "Basic";
+        }
+      };
+
       const updatedData: Partial<Module> = {
         title,
         description,
-        difficulty,
+        difficulty: reverseMappedDifficulty(difficulty),
         topics: topics.split(',').map(topic => topic.trim()),
         priceAda,
       };
