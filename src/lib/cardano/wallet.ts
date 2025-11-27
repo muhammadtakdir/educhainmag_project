@@ -1,6 +1,6 @@
 import { MeshWallet } from '@meshsdk/wallet';
 
-export function getWallet(skey: string): Wallet {
+export function getWallet(skey: string): MeshWallet {
   // In a real application, you would load the wallet securely
   // For demonstration purposes, we are creating a dummy wallet
   // based on the provided private key. 
