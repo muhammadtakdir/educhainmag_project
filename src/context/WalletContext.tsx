@@ -41,7 +41,7 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
         const addresses = await wallet.getUsedAddresses();
         const address = addresses[0];
         if (address) {
-          dispatch({ type: 'CONNECT', payload: { walletName: name, userAddress: address } });
+          dispatch({ type: 'CONNECT', payload: { walletName: name, userAddress: address as string } });
         }
       } else {
         dispatch({ type: 'DISCONNECT' });
