@@ -40,8 +40,15 @@ export const WalletProvider = ({ children }: { children: ReactNode }) => {
       if (connected && wallet) {
         const addresses = await wallet.getUsedAddresses();
         const address = addresses[0];
-        if (address) {
-          dispatch({ type: 'CONNECT', payload: { walletName: name, userAddress: address as string } });
+        // Ensure both name and address are treated as strings
+        const walletName = name || ''; // Provide a fallback for name
+        const userAddress = address || ''; // Provide a fallback for address
+
+        if (walletName && userAddress) { // Only dispatch CONNECT if both are present
+          dispatch({ type: 'CONNECT', payload: { walletName: walletName, userAddress: userAddress } });
+        } else {
+          // If either is missing, dispatch disconnect or handle as not connected
+          dispatch({ type: 'DISCONNECT' });
         }
       } else {
         dispatch({ type: 'DISCONNECT' });
