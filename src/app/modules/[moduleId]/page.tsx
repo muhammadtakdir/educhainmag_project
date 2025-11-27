@@ -7,6 +7,7 @@ import { startModule, completeLesson, completeModule } from '@/lib/firebase/prog
 import { getUserProgress, checkContentAccess, grantContentAccess, getAccessDetails } from '@/lib/firebase/access';
 import { Spinner, Alert, Container, Row, Col, Card, Button, ListGroup, ProgressBar, Modal } from 'react-bootstrap';
 import { Module, Lesson, UserProgress, Certificate } from '@/types';
+import { Module, Lesson, UserProgress, Certificate } from '@/types';
 
 
 import { initiateEscrow } from '@/lib/cardano/escrow';
@@ -208,7 +209,7 @@ export default function ModulePage({ params }: { params: { moduleId: string } })
 
       const currentIndex = lessons.findIndex(l => l.id === selectedLesson.id);
       const totalLessons = lessons.length;
-      const completedLessonsCount = progress.completedLessons.length;
+      const completedLessonsCount = progress ? progress.completedLessons.length : 0;
 
 
       if (currentIndex < lessons.length - 1) {
