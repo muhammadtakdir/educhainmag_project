@@ -266,12 +266,21 @@ export const claimFunds = async ({
     typeof value === 'bigint' ? value.toString() : value
   ));
   console.log("Script CBOR (Unwrapped used):", unwrappedScriptCbor.substring(0, 50) + "...");
-  console.log("--- ClaimFunds V25-CleanV3 START ---");
-  console.log("Original Script CBOR:", originalPlutusScriptCbor);
+  console.log("--- ClaimFunds V26-DoubleWrap START ---");
+  
+  // Helper to wrap in CBOR ByteString
+  const wrapCbor = (hex: string) => {
+    const length = hex.length / 2;
+    const lengthHex = length.toString(16).padStart(4, '0');
+    return "59" + lengthHex + hex;
+  };
+
+  const doubleWrapped = wrapCbor(originalPlutusScriptCbor);
+  console.log("Double Wrapped Script CBOR:", doubleWrapped.substring(0, 50) + "...");
 
   tx.spendingPlutusScriptV3() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
-    .txInScript(originalPlutusScriptCbor) 
+    .txInScript(doubleWrapped) 
     .txInRedeemerValue(redeemerDataSafe) 
     .txInInlineDatumPresent(); 
 
