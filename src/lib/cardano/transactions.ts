@@ -26,7 +26,8 @@ export async function mintCertificateNft(
 
   const tx = await lucid
     .newTx()
-    .mintAssets(assets, mintingPolicy)
+    .attachMintingPolicy(mintingPolicy)
+    .mintAssets(assets, redeemer)
     .attachMetadata(721, { [policyId]: { [assetName]: metadata } })
     .complete();
 
