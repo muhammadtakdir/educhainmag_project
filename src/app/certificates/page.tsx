@@ -1,7 +1,7 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { collection, query, where, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { useWallet } from '@meshsdk/react';
@@ -13,7 +13,7 @@ import { getUserById } from '@/lib/firebase/users';
 import { getModuleById } from '@/lib/firebase/content';
 
 
-export default function CertificatesPage() {
+function CertificatesContent() {
   const { wallet, connected } = useWallet();
   const [userId, setUserId] = useState<string | null>(null);
   const searchParams = useSearchParams();
@@ -200,5 +200,13 @@ export default function CertificatesPage() {
         )
       }
     </div>
+  );
+}
+
+export default function CertificatesPage() {
+  return (
+    <Suspense fallback={<div className="container mt-4 text-center">Loading...</div>}>
+      <CertificatesContent />
+    </Suspense>
   );
 }

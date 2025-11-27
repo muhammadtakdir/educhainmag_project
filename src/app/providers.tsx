@@ -1,12 +1,14 @@
 "use client";
 
 import { MeshProvider } from "@meshsdk/react";
-import { blockchainProvider } from "@/config/network";
+import { WalletProvider } from "@/context/WalletContext";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
     <MeshProvider>
-      {children}
+      <WalletProvider>
+        {children}
+      </WalletProvider>
     </MeshProvider>
   );
 }

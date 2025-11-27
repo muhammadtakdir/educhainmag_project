@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useWalletState } from '@/context/WalletContext';
 import { getLessonById, updateLesson } from '@/lib/firebase/content';
@@ -8,7 +8,7 @@ import { Lesson, QuizQuestion } from '@/types';
 import { Form, Button, Container, Alert, Spinner, Card, Row, Col } from 'react-bootstrap';
 import { v4 as uuidv4 } from 'uuid';
 
-export default function EditLessonPage() {
+function EditLessonContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const moduleId = searchParams.get('moduleId');
@@ -273,5 +273,13 @@ export default function EditLessonPage() {
         </Button>
       </Form>
     </Container>
+  );
+}
+
+export default function EditLessonPage() {
+  return (
+    <Suspense fallback={<Container className="mt-5 text-center"><Spinner animation="border" /> Loading...</Container>}>
+      <EditLessonContent />
+    </Suspense>
   );
 }

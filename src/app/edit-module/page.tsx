@@ -1,13 +1,13 @@
 "use client";
 
-import { useState, useEffect } from 'react';
+import { useState, useEffect, Suspense } from 'react';
 import { useRouter, useSearchParams } from 'next/navigation';
 import { useWalletState } from '@/context/WalletContext';
 import { getModuleById, updateModule } from '@/lib/firebase/content';
 import { Module } from '@/types';
 import { Form, Button, Container, Alert, Spinner } from 'react-bootstrap';
 
-export default function EditModulePage() {
+function EditModuleContent() {
   const router = useRouter();
   const searchParams = useSearchParams();
   const moduleId = searchParams.get('moduleId');
@@ -95,6 +95,7 @@ export default function EditModulePage() {
         difficulty: reverseMappedDifficulty(difficulty),
         topics: topics.split(',').map(topic => topic.trim()),
         priceAda,
+        contentProviderId: userAddress, // Ensure contentProviderId is set to the current user for verification if needed
       };
       await updateModule(moduleId as string, updatedData);
       setSuccess("Module updated successfully!");
@@ -197,5 +198,13 @@ export default function EditModulePage() {
         </Button>
       </Form>
     </Container>
+  );
+}
+
+export default function EditModulePage() {
+  return (
+    <Suspense fallback={<Container className="mt-5 text-center"><Spinner animation="border" /> Loading...</Container>}>
+      <EditModuleContent />
+    </Suspense>
   );
 }

@@ -1,14 +1,14 @@
 "use client";
 
 import Link from 'next/link';
-import { useEffect, useState } from 'react';
+import { useEffect, useState, Suspense } from 'react';
 import { collection, getDocs } from 'firebase/firestore';
 import { db } from '@/lib/firebase/firebase';
 import { Module } from '@/types';
 
 import { useSearchParams } from 'next/navigation';
 
-export default function ModulesPage() {
+function ModulesContent() {
   const [modules, setModules] = useState<Module[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -86,5 +86,13 @@ export default function ModulesPage() {
         ))}
       </div>
     </div>
+  );
+}
+
+export default function ModulesPage() {
+  return (
+    <Suspense fallback={<div className="container mt-4 text-center">Loading...</div>}>
+      <ModulesContent />
+    </Suspense>
   );
 }
