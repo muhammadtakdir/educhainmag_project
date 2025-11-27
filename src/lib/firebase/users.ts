@@ -59,3 +59,8 @@ export const getUsersWithProgress = async (): Promise<{ usersWithProgress: User[
   const users = await Promise.all(Array.from(userIds).map(id => getUserById(id)));
   return { usersWithProgress: users.filter(user => user !== null) as User[], completedUsers };
 };
+
+export const blockUser = async (userId: string): Promise<void> => {
+  const userRef = doc(db, "users", userId);
+  await updateDoc(userRef, { isBlocked: true });
+};
