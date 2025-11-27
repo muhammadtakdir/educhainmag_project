@@ -11,7 +11,8 @@ export const handleUserLogin = async (walletAddress: string): Promise<User> => {
   if (userSnap.exists()) {
     // User exists, update lastLoginAt
     await setDoc(userRef, { lastLoginAt: now }, { merge: true });
-    return { ...userSnap.data(), lastLoginAt: now } as User;
+    // Explicitly cast to User before spreading to satisfy TypeScript, and ensure date is correct type
+    return { ...(userSnap.data() as User), lastLoginAt: now.toDate() } as User;
   } else {
     // New user, create a new document
     const newUser: User = {
