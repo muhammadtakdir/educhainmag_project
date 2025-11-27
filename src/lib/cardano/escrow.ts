@@ -37,8 +37,10 @@ const originalPlutusScriptCbor = contract.validators[0].compiledCode;
 const unwrappedScriptCbor = unwrapScript(originalPlutusScriptCbor);
 
 // Calculate Hash using V3 (Matches on-chain address e5434...)
-const calculatedScriptHash = resolveScriptHash(originalPlutusScriptCbor, "V3");
-console.log("Calculated Script Hash (V3, original CBOR):", calculatedScriptHash);
+const calculatedScriptHashV3 = resolveScriptHash(originalPlutusScriptCbor, "V3");
+const calculatedScriptHashV2 = resolveScriptHash(originalPlutusScriptCbor, "V2");
+console.log("Calculated Script Hash (V3, original CBOR):", calculatedScriptHashV3);
+console.log("Calculated Script Hash (V2, original CBOR):", calculatedScriptHashV2);
 
 // Address MUST be V3 to match where funds are
 const scriptAddress = resolvePlutusScriptAddress(
@@ -264,9 +266,9 @@ export const claimFunds = async ({
     typeof value === 'bigint' ? value.toString() : value
   ));
   console.log("Script CBOR (Unwrapped used):", unwrappedScriptCbor.substring(0, 50) + "...");
-  console.log("--- ClaimFunds V20-UnwrappedV3 START ---");
+  console.log("--- ClaimFunds V21-V2Test START ---");
 
-  tx.spendingPlutusScriptV3() 
+  tx.spendingPlutusScriptV2() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
     .txInScript(originalPlutusScriptCbor) 
     .txInRedeemerValue(redeemerDataSafe) 
