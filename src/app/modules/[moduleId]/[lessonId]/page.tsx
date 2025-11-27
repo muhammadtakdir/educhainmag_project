@@ -11,6 +11,7 @@ import { startModule, completeLesson, updateQuizScore, completeModule } from '@/
 import { mintCertificateNft } from '@/lib/cardano/transactions';
 import { saveCertificate } from '@/lib/firebase/certificates';
 import QuizPlayer from '@/components/course/QuizPlayer';
+import { Button, Spinner, Alert } from 'react-bootstrap';
 
 export default function LessonDetailPage({ params }: { params: { moduleId: string; lessonId: string } }) {
   const { moduleId, lessonId } = params;
