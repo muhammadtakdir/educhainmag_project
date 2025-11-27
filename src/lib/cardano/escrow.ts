@@ -324,9 +324,7 @@ export const claimFunds = async ({
     .selectUtxosFrom(nonCollateralUtxos); // Use non-collateral UTXOs
 
   console.log("--- ClaimFunds: Before tx.complete() ---");
-  console.log("MeshTxBuilder state before complete:", JSON.stringify(tx.build(), (key, value) => 
-    typeof value === 'bigint' ? value.toString() : value
-  ));
+
 
   const unsignedTx = await tx.complete();
   console.log("--- ClaimFunds: Unsigned Transaction Hex (after complete) ---");
