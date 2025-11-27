@@ -15,7 +15,19 @@ import QuizPlayer from '@/components/course/QuizPlayer';
 export default function LessonDetailPage({ params }: { params: { moduleId: string; lessonId: string } }) {
   const { moduleId, lessonId } = params;
   const { wallet, connected } = useWallet();
-  const userId = connected && wallet?.address ? wallet.address[0] : null;
+  const [userId, setUserId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const getAddress = async () => {
+      if (connected && wallet) {
+        const addresses = await wallet.getUsedAddresses();
+        setUserId(addresses[0]);
+      } else {
+        setUserId(null);
+      }
+    };
+    getAddress();
+  }, [connected, wallet]);
 
   const [module, setModule] = useState<Module | null>(null);
   const [lesson, setLesson] = useState<Lesson | null>(null);
