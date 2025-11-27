@@ -141,18 +141,26 @@ export default function LessonDetailPage({ params }: { params: { moduleId: strin
     setMintingSuccess(false);
 
     try {
-      const onChainDetails = await mintCertificateNft(wallet, userId, module.id, module.title);
+      // Temporarily disabled due to library mismatch (Mesh vs Lucid)
+      console.log("Minting certificate for:", module.title);
+      // const onChainDetails = await mintCertificateNft(wallet, userId, module.id, module.title);
+      
       const newCertificate: Omit<Certificate, 'id'> = {
         userId,
         moduleId: module.id,
         issuedAt: new Date(),
-        onChainDetails,
+        onChainDetails: {
+            policyId: "mock-policy-id",
+            assetName: "mock-asset-name",
+            txHash: "mock-tx-hash",
+            cardanoscanUrl: "#"
+        },
         visualCertificateUrl: `#`,
       };
       await saveCertificate(newCertificate);
 
       setMintingSuccess(true);
-      alert("Sertifikat NFT Anda berhasil diklaim!");
+      alert("Sertifikat berhasil disimpan (Minting on-chain dinonaktifkan sementara)!");
     } catch (err) {
       console.error("Error minting or saving certificate:", err);
       setMintingError("Gagal mengklaim sertifikat NFT. Silakan coba lagi.");
