@@ -1,6 +1,7 @@
 import { db } from "./firebase";
 import { doc, getDoc, setDoc, updateDoc, Timestamp, collection, query, where, getDocs } from "firebase/firestore";
 import { UserProgress } from "@/types";
+import { getUserProgress } from "./access";
 
 export const getAllUserProgress = async (userId: string): Promise<UserProgress[]> => {
   const progressCollectionRef = collection(db, "userProgress");
