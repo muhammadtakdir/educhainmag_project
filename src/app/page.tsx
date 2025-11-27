@@ -48,6 +48,19 @@ export default function Home() {
     <div className="container mt-4">
       {/* Hero Section */}
       <section className="text-center py-5 bg-dark text-white rounded-3 mb-5">
+        <div className="container mb-4">
+          <div className="alert alert-warning" role="alert">
+            <h4 className="alert-heading">WARNING: Educational & Testing Purpose Only</h4>
+            <p>
+              Please ensure you are using the <strong>Cardano PREVIEW TESTNET</strong> network. 
+              Do not use Mainnet funds. 
+            </p>
+            <hr />
+            <p className="mb-0">
+              For source code and contribution, visit: <a href="https://github.com/muhammadtakdir/educhainmag_project" target="_blank" rel="noopener noreferrer" className="alert-link">https://github.com/muhammadtakdir/educhainmag_project</a>
+            </p>
+          </div>
+        </div>
         <h1 className="display-4 fw-bold mb-3">Explore the World of Web3 on Cardano!</h1>
         <p className="fs-5 mb-4">
           An interactive educational platform to learn about blockchain, Aiken smart contracts, and the Cardano ecosystem.
