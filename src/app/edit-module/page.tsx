@@ -36,7 +36,16 @@ export default function EditModulePage() {
           setModule(moduleData);
           setTitle(moduleData.title);
           setDescription(moduleData.description);
-          setDifficulty(moduleData.difficulty);
+          // Map Indonesian difficulty terms to English for the state
+          const mappedDifficulty = (diff: "Basic" | "Menengah" | "Mahir"): 'Beginner' | 'Intermediate' | 'Advanced' => {
+            switch (diff) {
+              case "Basic": return "Beginner";
+              case "Menengah": return "Intermediate";
+              case "Mahir": return "Advanced";
+              default: return "Beginner"; // Default to Beginner if unknown
+            }
+          };
+          setDifficulty(mappedDifficulty(moduleData.difficulty));
           setTopics(moduleData.topics.join(', '));
           setPriceAda(moduleData.priceAda || 0);
         } else {
