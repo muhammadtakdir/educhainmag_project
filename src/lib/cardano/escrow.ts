@@ -266,16 +266,12 @@ export const claimFunds = async ({
     typeof value === 'bigint' ? value.toString() : value
   ));
   console.log("Script CBOR (Unwrapped used):", unwrappedScriptCbor.substring(0, 50) + "...");
-  console.log("--- ClaimFunds V24-CanonicalScript START ---");
-
-  // Try re-serializing to ensure canonical format
-  const canonicalScript = serializePlutusScript({ code: unwrappedScriptCbor, version: "V3" }, undefined, 0);
-  console.log("Canonical Script CBOR:", canonicalScript.substring(0, 50) + "...");
-  console.log("Original Script CBOR:", originalPlutusScriptCbor.substring(0, 50) + "...");
+  console.log("--- ClaimFunds V25-CleanV3 START ---");
+  console.log("Original Script CBOR:", originalPlutusScriptCbor);
 
   tx.spendingPlutusScriptV3() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
-    .txInScript(canonicalScript) 
+    .txInScript(originalPlutusScriptCbor) 
     .txInRedeemerValue(redeemerDataSafe) 
     .txInInlineDatumPresent(); 
 
