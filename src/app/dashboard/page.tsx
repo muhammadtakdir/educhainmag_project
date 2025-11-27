@@ -569,7 +569,7 @@ export default function DashboardPage() {
                           <span>{lesson.title}</span>
                           <div>
                             <Button variant="outline-secondary" size="sm" onClick={() => handleMoveLesson(module.id, lesson.id, 'up')} disabled={index === 0}>Up</Button>
-                            <Button variant="outline-secondary" size="sm" className="ms-1" onClick={() => handleMoveLesson(module.id, lesson.id, 'down')} disabled={index === module.lessons.length - 1}>Down</Button>
+                            <Button variant="outline-secondary" size="sm" className="ms-1" onClick={() => handleMoveLesson(module.id, lesson.id, 'down')} disabled={index === (module.lessons?.length || 0) - 1}>Down</Button>
                             <Link href={`/edit-lesson?moduleId=${module.id}&lessonId=${lesson.id}`} passHref>
                               <Button variant="outline-primary" size="sm" className="ms-3">Edit</Button>
                             </Link>
