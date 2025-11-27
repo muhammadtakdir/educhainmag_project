@@ -266,11 +266,11 @@ export const claimFunds = async ({
     typeof value === 'bigint' ? value.toString() : value
   ));
   console.log("Script CBOR (Unwrapped used):", unwrappedScriptCbor.substring(0, 50) + "...");
-  console.log("--- ClaimFunds V22-V3Restored START ---");
+  console.log("--- ClaimFunds V23-UnwrappedV3Retry START ---");
 
   tx.spendingPlutusScriptV3() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
-    .txInScript(originalPlutusScriptCbor) 
+    .txInScript(unwrappedScriptCbor) 
     .txInRedeemerValue(redeemerDataSafe) 
     .txInInlineDatumPresent(); 
 
