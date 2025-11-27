@@ -9,7 +9,7 @@ export async function mintCertificateNft(
   user: User,
   metadata: any
 ): Promise<{ txHash: string; assetName: string; policyId: string }> { // 1. Change return type
-  const assetName = fromText(`${module.id}-${user.id}`);
+  const assetName = fromText(`${module.id}-${user.walletAddress}`);
 
   const assets: Assets = {
     [assetName]: 1n,
