@@ -12,6 +12,7 @@ const modulesData: Module[] = [
     difficulty: 'Basic',
     topics: ['Web3 Dasar', 'Blockchain'],
     order: 1,
+    contentProviderId: 'addr_test1_seed_provider',
   },
   {
     id: 'dasar-dasar-aiken',
@@ -22,6 +23,7 @@ const modulesData: Module[] = [
     difficulty: 'Menengah',
     topics: ['Aiken', 'Smart Contract'],
     order: 2,
+    contentProviderId: 'addr_test1_seed_provider',
   },
   {
     id: 'membangun-dapp-dengan-meshjs',
@@ -32,6 +34,7 @@ const modulesData: Module[] = [
     difficulty: 'Mahir',
     topics: ['Mesh.js', 'dApp Development'],
     order: 3,
+    contentProviderId: 'addr_test1_seed_provider',
   },
 ];
 
@@ -43,6 +46,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 1,
       contentType: 'text',
       content: 'Ini adalah konten pelajaran tentang apa itu blockchain. Blockchain adalah teknologi buku besar terdistribusi yang aman dan transparan.',
+      isPremium: false,
     },
     {
       id: 'bagaimana-blockchain-bekerja',
@@ -50,6 +54,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 2,
       contentType: 'text',
       content: 'Ini adalah konten pelajaran tentang bagaimana blockchain bekerja. Ini melibatkan blok, hash, dan konsensus.',
+      isPremium: false,
     },
     {
       id: 'apa-itu-web3',
@@ -57,6 +62,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 3,
       contentType: 'text',
       content: 'Ini adalah konten pelajaran tentang apa itu Web3. Web3 adalah iterasi internet berikutnya yang didukung oleh teknologi blockchain.',
+      isPremium: false,
     },
     {
       id: 'ekosistem-cardano',
@@ -64,6 +70,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 4,
       contentType: 'text',
       content: 'Ini adalah konten pelajaran tentang ekosistem Cardano. Cardano adalah platform blockchain proof-of-stake.',
+      isPremium: false,
     },
     {
       id: 'kuis-akhir-modul',
@@ -71,6 +78,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 5,
       contentType: 'quiz',
       content: 'Jawab pertanyaan-pertanyaan berikut untuk menyelesaikan modul ini.',
+      isPremium: false,
       quizQuestions: [
         {
           id: 'q1',
@@ -100,6 +108,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 1,
       contentType: 'text',
       content: 'Pelajari dasar-dasar bahasa pemrograman Aiken untuk smart contract Cardano.',
+      isPremium: false,
     },
     {
       id: 'struktur-program-aiken',
@@ -107,6 +116,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 2,
       contentType: 'text',
       content: 'Memahami struktur dasar dan sintaksis program Aiken.',
+      isPremium: false,
     },
   ],
   'membangun-dapp-dengan-meshjs': [
@@ -116,6 +126,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 1,
       contentType: 'text',
       content: 'Cara mengintegrasikan Mesh.js ke dalam proyek Next.js Anda.',
+      isPremium: false,
     },
     {
       id: 'interaksi-smart-contract',
@@ -123,6 +134,7 @@ const lessonsData: { [moduleId: string]: Lesson[] } = {
       order: 2,
       contentType: 'text',
       content: 'Menggunakan Mesh.js untuk berinteraksi dengan smart contract Cardano.',
+      isPremium: false,
     },
   ],
 };
