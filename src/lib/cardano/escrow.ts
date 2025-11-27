@@ -269,7 +269,7 @@ export const claimFunds = async ({
   tx.spendingPlutusScriptV3() 
     .txIn(scriptUtxo.input.txHash, scriptUtxo.input.outputIndex)
     .txInScript(unwrappedScriptCbor) 
-    .txInRedeemerValue(redeemerDataSafe, { mem: 7000000, steps: 300000000 }) 
+    .txInRedeemerValue(redeemerDataSafe) 
     .txInInlineDatumPresent(); 
 
   // Remove explicit collateral (Mesh handles it)
