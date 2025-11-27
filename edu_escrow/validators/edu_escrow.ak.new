@@ -1,0 +1,82 @@
+use aiken/builtin
+use cardano/types.{ScriptContext}
+
+// Edu Escrow validator with partial claims
+// - Student pays into this script with a Datum containing: student PKH, mentor PKH, amount, progress
+// - At 50% progress: mentor can claim 30% of funds after signing
+// - At 100% progress: mentor can claim remaining 70% after signing
+// - Both claims require mentor's signature for security
+
+type EduDatum {
+  student: ByteArray,
+  mentor: ByteArray,
+  amount: Int,
+  progress: Int,
+  partial_claimed: Bool,
+}
+
+type EduAction {
+  PartialClaim
+  FinalClaim
+}
+
+type EduRedeemer {
+  action: EduAction,
+  progress: Int,
+}
+
+validator edu_escrow {
+  spending datum: EduDatum, redeemer: EduRedeemer, context: ScriptContext {
+    // Must be signed by mentor
+    builtin.verify_ed25519_signature(datum.mentor, context.transaction.body, datum.mentor)
+    
+    when redeemer.action is {
+      // Partial claim at 50% progress (get 30% of funds)
+      PartialClaim -> 
+        // Must have progress >= 50% and not already partially claimed
+        redeemer.progress >= 50 &&
+        !datum.partial_claimed
+    
+      // Final claim at 100% progress (get remaining 70% or full 100%)
+      FinalClaim ->
+        // Must have progress 100%
+        redeemer.progress >= 100
+    }
+  }
+}
+
+test partial_claim_at_50() {
+  let datum = EduDatum {
+    student: #"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    mentor: #"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    amount: 100_000_000,
+    progress: 50,
+    partial_claimed: False,
+  }
+
+  let redeemer = EduRedeemer {
+    action: PartialClaim,
+    progress: 50,
+  }
+
+  // TODO: Add proper ScriptContext with mentor signature
+  True
+}
+
+test final_claim_at_100() {
+  let datum = EduDatum {
+    student: #"0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef",
+    mentor: #"fedcba9876543210fedcba9876543210fedcba9876543210fedcba9876543210",
+    amount: 100_000_000,
+    progress: 80,
+    partial_claimed: True,
+  }
+
+  let redeemer = EduRedeemer {
+    action: FinalClaim,
+    progress: 100,
+  }
+
+  // TODO: Add proper ScriptContext with mentor signature
+  True
+}

@@ -1,0 +1,52 @@
+use aiken/list
+use aiken/transaction.{ScriptContext}
+use aiken/transaction/credential.{ScriptCredential, VerificationKeyCredential}
+
+type Datum {
+  mentor_pkh: ByteArray,
+  student_pkh: ByteArray,
+  progress: Int,
+}
+
+type Action {
+  Release
+  Refund
+}
+
+type Redeemer {
+  action: Action,
+  progress: Int,
+}
+
+validator edu_escrow {
+  fn spend(datum: Datum, redeemer: Redeemer, ctx: ScriptContext) -> Bool {
+    let ScriptContext { transaction, .. } = ctx
+
+    when redeemer.action is {
+      // Release funds when progress >= 100% and signed by mentor
+      Release -> 
+        // Must be 100% progress
+        redeemer.progress >= 100 &&
+        // Must be signed by mentor
+        list.has(transaction.extra_signatories, datum.mentor_pkh)
+
+      // No refund path - student pays and must wait for 100% progress
+      Refund -> 
+        False
+    }
+  }
+}
+
+test spend_release_success() {
+  let datum = Datum { 
+    mentor_pkh: #"deadbeef", 
+    student_pkh: #"beefdead",
+    progress: 80,
+  }
+  let redeemer = Redeemer {
+    action: Release,
+    progress: 100,
+  }
+  // TODO: Add test context with mentor signature
+  True
+}

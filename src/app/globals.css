@@ -1,0 +1,7 @@
+@import "bootstrap/dist/css/bootstrap.min.css";
+
+/* Custom global styles can go here */
+body {
+  background-color: #212529; /* Dark background for consistency */
+  color: #f8f9fa; /* Light text color */
+}

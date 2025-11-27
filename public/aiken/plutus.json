@@ -1,0 +1,97 @@
+{
+  "preamble": {
+    "title": "gemini/educhainmag",
+    "description": "Aiken contracts for project 'gemini/educhainmag'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.19+e525483"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "escrow.escrow.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/escrow~1EscrowDatum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/escrow~1Redeemer"
+        }
+      },
+      "compiledCode": "58b701010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cc01c0092225980099b8748008c01cdd500144c8cc896600266e1d2000300a375400d1323259800980800144c96600266e1d20000018a518acc004cdc3a400400314a315980099b87480100062946294100c201840306eb4c03cc034dd500445900e1bad300e001300b375400d16402460160026016601800260106ea800a2c8030600e00260066ea801e29344d9590011",
+      "hash": "3e1b20bc0cf07706a54cf902cb32a516eadefafeb69a541280161947"
+    },
+    {
+      "title": "escrow.escrow.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "58b701010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cc01c0092225980099b8748008c01cdd500144c8cc896600266e1d2000300a375400d1323259800980800144c96600266e1d20000018a518acc004cdc3a400400314a315980099b87480100062946294100c201840306eb4c03cc034dd500445900e1bad300e001300b375400d16402460160026016601800260106ea800a2c8030600e00260066ea801e29344d9590011",
+      "hash": "3e1b20bc0cf07706a54cf902cb32a516eadefafeb69a541280161947"
+    }
+  ],
+  "definitions": {
+    "Int": {
+      "dataType": "integer"
+    },
+    "aiken/crypto/VerificationKeyHash": {
+      "title": "VerificationKeyHash",
+      "dataType": "bytes"
+    },
+    "escrow/EscrowDatum": {
+      "title": "EscrowDatum",
+      "anyOf": [
+        {
+          "title": "EscrowDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "student_address",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            },
+            {
+              "title": "author_address",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            },
+            {
+              "title": "platform_address",
+              "$ref": "#/definitions/aiken~1crypto~1VerificationKeyHash"
+            },
+            {
+              "title": "total_amount",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "paid_to_author",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    },
+    "escrow/Redeemer": {
+      "title": "Redeemer",
+      "anyOf": [
+        {
+          "title": "Redeemer",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "action",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
