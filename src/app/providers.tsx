@@ -5,7 +5,7 @@ import { blockchainProvider } from "@/config/network";
 
 export default function Providers({ children }: { children: React.ReactNode }) {
   return (
-    <MeshProvider blockchainProvider={blockchainProvider}>
+    <MeshProvider>
       {children}
     </MeshProvider>
   );
