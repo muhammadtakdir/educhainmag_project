@@ -31,7 +31,7 @@ const CertificateDisplay: React.FC<CertificateDisplayProps> = ({ certificate }) 
           <p className="text-center small text-muted">EduChainMag Lead</p>
         </div>
         <div className="col-4 text-center">
-          <p className="mb-0">Issued on: {new Date(certificate.issuedAt instanceof Date ? certificate.issuedAt : (certificate.issuedAt && typeof certificate.issuedAt.toDate === 'function' ? certificate.issuedAt.toDate() : certificate.issuedAt)).toLocaleDateString()}</p>
+          <p className="mb-0">Issued on: {new Date(certificate.issuedAt instanceof Date ? certificate.issuedAt : (certificate.issuedAt && typeof (certificate.issuedAt as any).toDate === 'function' ? (certificate.issuedAt as any).toDate() : certificate.issuedAt)).toLocaleDateString()}</p>
         </div>
         <div className="col-4 text-center">
           <img src={qrCodeUrl} alt="Cardano Verification QR Code" />
