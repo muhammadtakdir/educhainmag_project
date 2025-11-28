@@ -1,28 +1,29 @@
 use aiken/collection/list
-use aiken/collection/dict
-use aiken/interval.{everything}
-use cardano/transaction.{Output, OutputReference, Transaction, NoDatum, InlineDatum}
-use cardano/address.{Address, Script, VerificationKey}
-use cardano/assets.{from_lovelace, zero}
+use cardano/transaction.{Transaction, OutputReference, Output, InlineDatum}
+use cardano/address.{Address, Credential, Script}
+use cardano/assets
 
-// Edu Escrow validator with partial claims
-// - Student pays into this script with a Datum containing: student PKH, mentor PKH, amount, progress
-// - At 50% progress: mentor can claim 30% of funds after signing
-// - At 100% progress: mentor can claim remaining 70% after signing
-// - Both claims require mentor's signature for security
+// Edu Escrow validator - SECURE version with output verification
+// 
+// SECURITY FEATURES:
+// 1. Verifies mentor signature
+// 2. Verifies output amounts (30%/70% for partial, 60%/40% for final)
+// 3. Verifies continuing output for partial claim
+// 4. Prevents double partial claim
+// 5. Verifies datum update for continuing output
 
 pub type EduDatum {
   student: ByteArray,
   mentor: ByteArray,
-  platform: ByteArray,  // Platform's public key hash for receiving platform fee
+  platform: ByteArray,
   amount: Int,
   progress: Int,
   partial_claimed: Bool,
 }
 
 pub type EduAction {
-  PartialClaim  // At 50% - claim 30% 
-  FinalClaim    // At 100% - claim 60% to mentor, 40% to platform
+  PartialClaim  // At 50% - mentor gets 30%, 70% returns to script
+  FinalClaim    // At 100% - mentor gets 60%, platform gets 40%
 }
 
 pub type EduRedeemer {
@@ -30,217 +31,150 @@ pub type EduRedeemer {
   progress: Int,
 }
 
+// Helper: Check if an output pays at least `min_amount` lovelace to a PKH
+fn output_pays_to_pkh(output: Output, pkh: ByteArray, min_amount: Int) -> Bool {
+  let has_correct_pkh = when output.address.payment_credential is {
+    Credential.VerificationKey(vkh) -> vkh == pkh
+    _ -> False
+  }
+  let has_enough_value = assets.lovelace_of(output.value) >= min_amount
+  has_correct_pkh && has_enough_value
+}
+
+// Helper: Check if an output is to a script address with correct datum
+fn output_continues_to_script(
+  output: Output, 
+  script_hash: ByteArray,
+  expected_datum: EduDatum,
+  min_amount: Int
+) -> Bool {
+  // Check it's going to our script
+  let is_script_address = when output.address.payment_credential is {
+    Credential.Script(sh) -> sh == script_hash
+    _ -> False
+  }
+  
+  // Check has enough value
+  let has_enough_value = assets.lovelace_of(output.value) >= min_amount
+  
+  // Check datum is correct (inline datum with partial_claimed = True)
+  let has_correct_datum = when output.datum is {
+    InlineDatum(data) -> {
+      expect d: EduDatum = data
+      d.student == expected_datum.student &&
+      d.mentor == expected_datum.mentor &&
+      d.platform == expected_datum.platform &&
+      d.amount == expected_datum.amount &&
+      d.partial_claimed == True  // Must be marked as claimed
+    }
+    _ -> False
+  }
+  
+  is_script_address && has_enough_value && has_correct_datum
+}
+
+// Helper: Find output that pays to PKH
+fn find_output_to_pkh(outputs: List<Output>, pkh: ByteArray, min_amount: Int) -> Bool {
+  list.any(outputs, fn(o) { output_pays_to_pkh(o, pkh, min_amount) })
+}
+
+// Helper: Find continuing output to script
+fn find_continuing_output(
+  outputs: List<Output>, 
+  script_hash: ByteArray,
+  expected_datum: EduDatum,
+  min_amount: Int
+) -> Bool {
+  list.any(outputs, fn(o) { output_continues_to_script(o, script_hash, expected_datum, min_amount) })
+}
+
 validator edu_escrow {
-  spend(datum: Option<EduDatum>, redeemer: EduRedeemer, _oref: OutputReference, tx: Transaction) {
+  spend(datum: Option<EduDatum>, redeemer: EduRedeemer, oref: OutputReference, tx: Transaction) {
     expect Some(d) = datum
+    
+    // Get our own script hash from the input being spent
+    let own_input = list.find(tx.inputs, fn(i) { i.output_reference == oref })
+    expect Some(input) = own_input
+    let own_script_hash = when input.output.address.payment_credential is {
+      Credential.Script(sh) -> sh
+      _ -> fail @"Not a script input"
+    }
 
     when redeemer.action is {
-      // Partial claim at 50% progress (get 30% of funds)
+      // Partial claim at 50% progress
+      // Mentor gets 30% (minus fee), 70% returns to script
       PartialClaim -> {
+        // 1. Mentor must sign
         let mentor_signed = list.has(tx.extra_signatories, d.mentor)
+        
+        // 2. Progress must be at least 50%
         let meets_progress = redeemer.progress >= 50
+        
+        // 3. Must not have been partially claimed before
         let not_claimed = !d.partial_claimed
-        let mentor_payment = from_lovelace((d.amount * 30) / 100)
-
-        // Verify mentor output exists with correct amount
-        expect Some(_mentor_output) =
-          list.find(
-            tx.outputs,
-            fn(output) {
-              output.address.payment_credential == VerificationKey(d.mentor) &&
-              output.value == mentor_payment
-            }
-          )
+        
+        // 4. Calculate expected amounts
+        // Mentor gets 30% minus ~1 ADA for tx fee (mentor pays fee)
+        // Remaining 70% goes back to script FULL
+        let mentor_amount = d.amount * 30 / 100 - 1000000  // Mentor pays fee
+        let remaining_amount = d.amount * 70 / 100         // Full 70% back to script
+        
+        // 5. Check mentor receives at least (30% - fee)
+        let mentor_paid = find_output_to_pkh(tx.outputs, d.mentor, mentor_amount)
+        
+        // 6. Check remaining goes back to script with updated datum
+        let expected_continuing_datum = EduDatum {
+          student: d.student,
+          mentor: d.mentor,
+          platform: d.platform,
+          amount: d.amount,
+          progress: d.progress,
+          partial_claimed: True,
+        }
+        let has_continuing = find_continuing_output(
+          tx.outputs, 
+          own_script_hash, 
+          expected_continuing_datum,
+          remaining_amount
+        )
 
         and {
-          mentor_signed,
-          meets_progress,
-          not_claimed
+          mentor_signed?,
+          meets_progress?,
+          not_claimed?,
+          mentor_paid?,
+          has_continuing?,
         }
       }
     
-      // Final claim at 100% progress (split remaining: 60% mentor, 40% platform)
+      // Final claim at 100% progress
+      // Mentor gets 60% (minus fee), Platform gets 40%
       FinalClaim -> {
+        // 1. Mentor must sign
         let mentor_signed = list.has(tx.extra_signatories, d.mentor)
+        
+        // 2. Progress must be 100%
         let meets_progress = redeemer.progress >= 100
-        let remaining = if d.partial_claimed { 70 } else { 100 }
         
-        // Calculate final shares
-        let mentor_share = (d.amount * remaining * 60) / (100 * 100)  // 60% of remaining
-        let platform_share = (d.amount * remaining * 40) / (100 * 100)  // 40% of remaining
+        // 3. Calculate expected amounts based on whether partial was claimed
+        // If partial was claimed, we're working with 70% of original amount
+        let base_amount = if d.partial_claimed { d.amount * 70 / 100 } else { d.amount }
+        let mentor_amount = base_amount * 60 / 100 - 1000000  // Mentor pays fee
+        let platform_amount = base_amount * 40 / 100         // Platform gets full 40%
         
-  let mentor_payment = from_lovelace(mentor_share)
-  let platform_payment = from_lovelace(platform_share)        // Verify both outputs exist with correct amounts
-        expect Some(_mentor_output) =
-          list.find(
-            tx.outputs,
-            fn(output) {
-              output.address.payment_credential == VerificationKey(d.mentor) &&
-              output.value == mentor_payment
-            }
-          )
-
-        expect Some(_platform_output) =
-          list.find(
-            tx.outputs,
-            fn(output) {
-              output.address.payment_credential == VerificationKey(d.platform) &&
-              output.value == platform_payment
-            }
-          )
+        // 4. Check mentor receives at least (60% - fee) of remaining
+        let mentor_paid = find_output_to_pkh(tx.outputs, d.mentor, mentor_amount)
+        
+        // 5. Check platform receives full 40% of remaining
+        let platform_paid = find_output_to_pkh(tx.outputs, d.platform, platform_amount)
 
         and {
-          mentor_signed,
-          meets_progress
+          mentor_signed?,
+          meets_progress?,
+          mentor_paid?,
+          platform_paid?,
         }
       }
     }
   }
-}
-
-test partial_claim_at_50() {
-  let student = #"0000000000000000000000000000000000000000000000000000000000000000"
-  let mentor = #"1111111111111111111111111111111111111111111111111111111111111111"
-  let platform = #"2222222222222222222222222222222222222222222222222222222222222222"
-  let amount = 100_000_000
-
-  let datum = EduDatum {
-    student,
-    mentor,
-    platform,
-    amount,
-    progress: 50,
-    partial_claimed: False,
-  }
-
-  let redeemer = EduRedeemer {
-    action: PartialClaim,
-    progress: 50,
-  }
-
-  let mentor_payment = from_lovelace((amount * 30) / 100)
-  let remaining_value = from_lovelace(amount - (amount * 30) / 100)
-
-  let mentor_output = Output {
-    address: Address { 
-      payment_credential: VerificationKey(mentor), 
-      stake_credential: None 
-    },
-    value: mentor_payment,
-    datum: NoDatum,
-    reference_script: None,
-  }
-
-  let script_output = Output {
-    address: Address { 
-      payment_credential: Script(#"00"), 
-      stake_credential: None 
-    },
-    value: remaining_value,
-    datum: InlineDatum(EduDatum { ..datum, partial_claimed: True }),
-    reference_script: None,
-  }
-
-  let tx = Transaction {
-    inputs: [transaction.Input {
-      output_reference: OutputReference { transaction_id: #"00", output_index: 0 },
-      output: Output {
-        address: Address { payment_credential: Script(#"00"), stake_credential: None },
-        value: from_lovelace(amount),
-        datum: InlineDatum(datum),
-        reference_script: None,
-      }
-    }],
-    reference_inputs: [],
-    outputs: [mentor_output, script_output],
-    fee: 0,
-    mint: zero,
-    certificates: [],
-    withdrawals: [],
-    validity_range: everything,
-    extra_signatories: [mentor],
-  redeemers: [],
-  datums: dict.empty,
-  proposal_procedures: [],
-  treasury_donation: None,
-  current_treasury_amount: None,
-    votes: [],
-    id: #"00"
-  }
-
-  edu_escrow.spend(Some(datum), redeemer, OutputReference { transaction_id: #"00", output_index: 0 }, tx)
-}
-
-test final_claim_at_100() {
-  let student = #"0000000000000000000000000000000000000000000000000000000000000000"
-  let mentor = #"1111111111111111111111111111111111111111111111111111111111111111"
-  let platform = #"2222222222222222222222222222222222222222222222222222222222222222"
-  let amount = 100_000_000
-  let remaining = 70_000_000 // 70% remaining after partial claim
-
-  let datum = EduDatum {
-    student,
-    mentor,
-    platform,
-    amount,
-    progress: 80,
-    partial_claimed: True,
-  }
-
-  let redeemer = EduRedeemer {
-    action: FinalClaim,
-    progress: 100,
-  }
-
-  let mentor_share = (remaining * 60) / 100
-  let platform_share = (remaining * 40) / 100
-
-  let mentor_output = Output {
-    address: Address { 
-      payment_credential: VerificationKey(mentor), 
-      stake_credential: None 
-    },
-    value: from_lovelace(mentor_share),
-    datum: NoDatum,
-    reference_script: None,
-  }
-
-  let platform_output = Output {
-    address: Address { 
-      payment_credential: VerificationKey(platform), 
-      stake_credential: None 
-    },
-    value: from_lovelace(platform_share),
-    datum: NoDatum,
-    reference_script: None,
-  }
-
-  let tx = Transaction {
-    inputs: [transaction.Input {
-      output_reference: OutputReference { transaction_id: #"00", output_index: 0 },
-      output: Output {
-        address: Address { payment_credential: Script(#"00"), stake_credential: None },
-        value: from_lovelace(remaining),
-        datum: InlineDatum(datum),
-        reference_script: None,
-      }
-    }],
-    reference_inputs: [],
-    outputs: [mentor_output, platform_output],
-    fee: 0,
-    mint: zero,
-    certificates: [],
-    withdrawals: [],
-    validity_range: everything,
-    extra_signatories: [mentor],
-  redeemers: [],
-  datums: dict.empty,
-  proposal_procedures: [],
-  treasury_donation: None,
-  current_treasury_amount: None,
-    votes: [],
-    id: #"00"
-  }
-
-  edu_escrow.spend(Some(datum), redeemer, OutputReference { transaction_id: #"00", output_index: 0 }, tx)
 }

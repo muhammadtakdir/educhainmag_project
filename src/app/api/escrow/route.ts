@@ -3,24 +3,58 @@
  * 
  * Server-side Blockfrost calls to avoid CORS issues.
  * Lucid-cardano has CORS issues when used directly in browser.
+ * 
+ * SECURITY: No hardcoded API keys - uses environment variables only
  */
 
 import { NextRequest, NextResponse } from "next/server";
 import contract from "@/lib/cardano/contracts/plutus.json";
+import { blake2b } from "blakejs";
+import { bech32 } from "bech32";
 
-// Use env var, fallback to hardcoded for testing
-const BLOCKFROST_KEY = process.env.NEXT_PUBLIC_BLOCKFROST_KEY_PREVIEW || "preview3b92mPmpMq2PXOyrtuGKDneghPXBtLBf";
+// SECURITY: Only use environment variable, no fallback
+const BLOCKFROST_KEY = process.env.NEXT_PUBLIC_BLOCKFROST_KEY_PREVIEW;
 const BLOCKFROST_URL = "https://cardano-preview.blockfrost.io/api/v0";
 
-// Script CBOR and hash from Aiken
+if (!BLOCKFROST_KEY) {
+  console.error("[API] CRITICAL: BLOCKFROST_KEY not configured!");
+}
+
+// Script CBOR and hash from Aiken (current secure validator)
 const SCRIPT_CBOR = (contract as any).validators[0].compiledCode;
 const AIKEN_SCRIPT_HASH = (contract as any).validators[0].hash;
 
-// The CORRECT script address (Aiken hash)
-const CORRECT_SCRIPT_ADDRESS = "addr_test1wprmuqd5uef4almr7afqy22leqd0kxuqvd0qk0z46ygwccgjj5d2u";
+// Compute current script address from hash
+function computeScriptAddress(scriptCbor: string): string {
+  const scriptBytes = Buffer.from(scriptCbor, "hex");
+  const prefixed = Buffer.concat([Buffer.from([0x03]), scriptBytes]);
+  const hash = blake2b(prefixed, undefined, 28);
+  const hashHex = Buffer.from(hash).toString("hex");
+  
+  const headerByte = 0x70; // testnet
+  const hashBytes = Buffer.from(hashHex, "hex");
+  const addressBytes = Buffer.concat([Buffer.from([headerByte]), hashBytes]);
+  const words = bech32.toWords(addressBytes);
+  return bech32.encode("addr_test", words, 108);
+}
 
-// OLD script address (MeshJS bug - permanently locked)
-const OLD_SCRIPT_ADDRESS = "addr_test1wrvqe3g6vnsp27ckv073qz8785rzxl38pyjdyga40l4k5ysj73xxt";
+// Current secure validator address
+const CURRENT_SCRIPT_ADDRESS = computeScriptAddress(SCRIPT_CBOR);
+
+// Legacy addresses (LOCKED - display only)
+const LEGACY_ADDRESSES = [
+  // Old MeshJS bug address (wrong hash computation) - 20 ADA MTKR locked
+  "addr_test1wrvqe3g6vnsp27ckv073qz8785rzxl38pyjdyga40l4k5ysj73xxt",
+  // Old insecure validator (no output verification)
+  "addr_test1wprmuqd5uef4almr7afqy22leqd0kxuqvd0qk0z46ygwccgjj5d2u",
+  // Validator with FinalClaim bug (didn't account for partial_claimed) - 7 ADA locked
+  "addr_test1wpd30rfa8kkdy59dpf7xwvy56tke4rrpn04glzznzt2as5czmhawx",
+  // Validator V4 with fee deducted from platform (now mentor pays fee)
+  "addr_test1wps9szv250zk0t6t8gynk4grd3zk64wvseapcq5s3qmgc5c0s02fl",
+];
+
+console.log("[API] Current script address:", CURRENT_SCRIPT_ADDRESS);
+console.log("[API] Legacy addresses:", LEGACY_ADDRESSES.length);
 
 interface EduDatum {
   student: string;
@@ -171,12 +205,12 @@ export async function GET(request: NextRequest) {
       address: string;
     }> = [];
     
-    // Fetch from CORRECT address (new escrows - claimable)
-    console.log("[API] Fetching from correct address:", CORRECT_SCRIPT_ADDRESS);
-    const correctUtxos = await fetchUtxos(CORRECT_SCRIPT_ADDRESS);
-    console.log(`[API] Found ${correctUtxos.length} UTXOs at correct address`);
+    // Fetch from CURRENT address (new secure escrows - claimable)
+    console.log("[API] Fetching from current address:", CURRENT_SCRIPT_ADDRESS);
+    const currentUtxos = await fetchUtxos(CURRENT_SCRIPT_ADDRESS);
+    console.log(`[API] Found ${currentUtxos.length} UTXOs at current address`);
     
-    for (const utxo of correctUtxos) {
+    for (const utxo of currentUtxos) {
       // Always fetch datum JSON via data_hash (inline_datum is CBOR hex, not JSON)
       if (utxo.data_hash) {
         console.log("[API] Fetching datum for:", utxo.tx_hash, "hash:", utxo.data_hash);
@@ -190,46 +224,48 @@ export async function GET(request: NextRequest) {
               utxo: {
                 txHash: utxo.tx_hash,
                 outputIndex: utxo.output_index,
-                address: CORRECT_SCRIPT_ADDRESS,
+                address: CURRENT_SCRIPT_ADDRESS,
                 amount: utxo.amount,
                 datumHash: utxo.data_hash,
                 inlineDatumCbor: utxo.inline_datum,
               },
               datum,
               isLocked: false,
-              address: CORRECT_SCRIPT_ADDRESS,
+              address: CURRENT_SCRIPT_ADDRESS,
             });
           }
         }
       }
     }
     
-    // Fetch from OLD address (locked escrows - display only)
-    console.log("[API] Fetching from old address:", OLD_SCRIPT_ADDRESS);
-    const oldUtxos = await fetchUtxos(OLD_SCRIPT_ADDRESS);
-    console.log(`[API] Found ${oldUtxos.length} UTXOs at old address (LOCKED)`);
-    
-    for (const utxo of oldUtxos) {
-      // Always fetch datum JSON via data_hash (inline_datum is CBOR hex, not JSON)
-      if (utxo.data_hash) {
-        console.log("[API] Fetching datum for old:", utxo.tx_hash);
-        const datumJson = await fetchDatum(utxo.data_hash);
-        if (datumJson) {
-          const datum = parseDatumJson(datumJson);
-          if (datum) {
-            results.push({
-              utxo: {
-                txHash: utxo.tx_hash,
-                outputIndex: utxo.output_index,
-                address: OLD_SCRIPT_ADDRESS,
-                amount: utxo.amount,
-                datumHash: utxo.data_hash,
-                inlineDatumCbor: utxo.inline_datum,
-              },
-              datum,
-              isLocked: true,
-              address: OLD_SCRIPT_ADDRESS,
-            });
+    // Fetch from ALL legacy addresses (locked escrows - display only)
+    for (const legacyAddr of LEGACY_ADDRESSES) {
+      console.log("[API] Fetching from legacy address:", legacyAddr);
+      const legacyUtxos = await fetchUtxos(legacyAddr);
+      console.log(`[API] Found ${legacyUtxos.length} UTXOs at legacy address (LOCKED)`);
+      
+      for (const utxo of legacyUtxos) {
+        // Always fetch datum JSON via data_hash (inline_datum is CBOR hex, not JSON)
+        if (utxo.data_hash) {
+          console.log("[API] Fetching datum for legacy:", utxo.tx_hash);
+          const datumJson = await fetchDatum(utxo.data_hash);
+          if (datumJson) {
+            const datum = parseDatumJson(datumJson);
+            if (datum) {
+              results.push({
+                utxo: {
+                  txHash: utxo.tx_hash,
+                  outputIndex: utxo.output_index,
+                  address: legacyAddr,
+                  amount: utxo.amount,
+                  datumHash: utxo.data_hash,
+                  inlineDatumCbor: utxo.inline_datum,
+                },
+                datum,
+                isLocked: true,
+                address: legacyAddr,
+              });
+            }
           }
         }
       }
@@ -253,8 +289,8 @@ export async function GET(request: NextRequest) {
     
     return NextResponse.json({
       escrows: filteredResults,
-      correctAddress: CORRECT_SCRIPT_ADDRESS,
-      oldAddress: OLD_SCRIPT_ADDRESS,
+      currentAddress: CURRENT_SCRIPT_ADDRESS,
+      legacyAddresses: LEGACY_ADDRESSES,
       scriptHash: AIKEN_SCRIPT_HASH,
       total: filteredResults.length,
       locked: filteredResults.filter(e => e.isLocked).length,

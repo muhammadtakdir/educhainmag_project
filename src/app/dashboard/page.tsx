@@ -389,6 +389,28 @@ export default function DashboardPage() {
     
     setClaiming(true);
     try {
+      // SECURITY: Verify UTxO still exists on-chain before claiming
+      // This prevents double-claim attacks where someone refreshes the page
+      // and tries to claim an already-spent UTxO
+      console.log("[CLAIM] Verifying UTxO still exists on-chain...");
+      console.log("[CLAIM] Looking for txHash:", escrow.utxo.txHash, "outputIndex:", escrow.utxo.outputIndex);
+      const verifyResponse = await fetch("/api/escrow");
+      if (verifyResponse.ok) {
+        const verifyData = await verifyResponse.json();
+        console.log("[CLAIM] API returned", verifyData.escrows?.length || 0, "escrows");
+        // API returns 'escrows' array, each with 'utxo' object
+        const stillExists = verifyData.escrows?.some(
+          (e: any) => e.utxo.txHash === escrow.utxo.txHash && e.utxo.outputIndex === escrow.utxo.outputIndex
+        );
+        if (!stillExists) {
+          throw new Error("This escrow has already been claimed or spent. Please refresh the page.");
+        }
+        console.log("[CLAIM] UTxO verified - still exists on-chain");
+      } else {
+        // If verification fails, warn but continue (Blockfrost might be down)
+        console.warn("[CLAIM] Could not verify UTxO, proceeding anyway...");
+      }
+      
       // Determine actual progress based on action
       let actualProgress = 0;
       if (action === "PartialClaim") {

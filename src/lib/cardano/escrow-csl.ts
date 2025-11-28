@@ -4,6 +4,10 @@
  * This module provides correct PlutusV3 script hash calculation
  * and transaction building using the CORRECT script address.
  * 
+ * SECURITY: V2 validator verifies output amounts on-chain
+ * - PartialClaim: 30% to mentor, 70% back to script
+ * - FinalClaim: 60% to mentor, 40% to platform
+ * 
  * Due to MeshJS bug, escrows created here will be at the CORRECT address
  * and will be claimable (unlike old escrows at MeshJS wrong address).
  */
@@ -22,11 +26,15 @@ import { blake2b } from "blakejs";
 import contract from "./contracts/plutus.json";
 import { bech32 } from "bech32";
 
-const blockchainProvider = new BlockfrostProvider(
-  process.env.NEXT_PUBLIC_BLOCKFROST_KEY_PREVIEW as string
-);
+// Validate Blockfrost key exists
+const BLOCKFROST_KEY = process.env.NEXT_PUBLIC_BLOCKFROST_KEY_PREVIEW;
+if (!BLOCKFROST_KEY) {
+  console.warn("[CSL] WARNING: BLOCKFROST_KEY not configured. API calls will fail.");
+}
 
-// Load Script from plutus.json
+const blockchainProvider = new BlockfrostProvider(BLOCKFROST_KEY || "");
+
+// Load Script from plutus.json (V2 SECURE validator)
 const originalPlutusScriptCbor = (contract as any).validators[0].compiledCode;
 const aikenScriptHash = (contract as any).validators[0].hash;
 
@@ -34,8 +42,41 @@ const aikenScriptHash = (contract as any).validators[0].hash;
 // Without this, MeshJS will compute wrong script hash!
 const wrappedScriptCbor = applyCborEncoding(originalPlutusScriptCbor);
 
-// The CORRECT script address (verified by test-hash.js)
-export const CORRECT_SCRIPT_ADDRESS = "addr_test1wprmuqd5uef4almr7afqy22leqd0kxuqvd0qk0z46ygwccgjj5d2u";
+// Script addresses - computed dynamically from hash
+// OLD addresses are for display only (locked forever due to MeshJS bug or old validator)
+
+// Compute addresses at module load
+const _computedScriptHash = (() => {
+  const scriptBytes = Buffer.from(originalPlutusScriptCbor, "hex");
+  const prefixed = Buffer.concat([Buffer.from([0x03]), scriptBytes]);
+  const hash = blake2b(prefixed, undefined, 28);
+  return Buffer.from(hash).toString("hex");
+})();
+
+// Export the current script address (computed from new secure validator)
+export const CORRECT_SCRIPT_ADDRESS = (() => {
+  const headerByte = 0x70; // testnet
+  const hashBytes = Buffer.from(_computedScriptHash, "hex");
+  const addressBytes = Buffer.concat([Buffer.from([headerByte]), hashBytes]);
+  const words = bech32.toWords(addressBytes);
+  return bech32.encode("addr_test", words, 108);
+})();
+
+// Legacy addresses (LOCKED - cannot claim from these)
+export const LEGACY_ADDRESSES = {
+  // Old MeshJS bug address (wrong hash computation) - 20 ADA MTKR locked
+  MESHJS_BUG: "addr_test1wrvqe3g6vnsp27ckv073qz8785rzxl38pyjdyga40l4k5ysj73xxt",
+  // Old insecure validator (no output verification)
+  OLD_VALIDATOR: "addr_test1wprmuqd5uef4almr7afqy22leqd0kxuqvd0qk0z46ygwccgjj5d2u",
+  // Validator with FinalClaim bug (didn't account for partial_claimed) - 7 ADA locked
+  FINALCLAIM_BUG: "addr_test1wpd30rfa8kkdy59dpf7xwvy56tke4rrpn04glzznzt2as5czmhawx",
+  // Validator V4 with fee deducted from platform (now mentor pays fee) 
+  FEE_FROM_PLATFORM: "addr_test1wps9szv250zk0t6t8gynk4grd3zk64wvseapcq5s3qmgc5c0s02fl",
+};
+
+console.log("[CSL] Script hash (Aiken):", aikenScriptHash);
+console.log("[CSL] Script hash (computed):", _computedScriptHash);
+console.log("[CSL] Current script address:", CORRECT_SCRIPT_ADDRESS);
 
 /**
  * Compute PlutusV3 script hash correctly
@@ -262,7 +303,7 @@ export const initiateEscrowCSL = async ({
 export const claimFundsCSL = async ({
   wallet,
   scriptUtxo,
-  datum,
+  datum: passedDatum,
   action,
   currentProgress,
 }: ClaimFundsCSLParams) => {
@@ -277,6 +318,28 @@ export const claimFundsCSL = async ({
 
     console.log("[CSL] Mentor address:", mentorAddr);
     console.log("[CSL] Mentor PKH:", mentorPkh);
+
+    // Parse datum from inline datum CBOR (fresh from UTxO, not cached)
+    let datum = passedDatum;
+    if (scriptUtxo.output.plutusData) {
+      try {
+        const parsedDatum = deserializeDatum(scriptUtxo.output.plutusData);
+        if (parsedDatum.constructor === 0n && parsedDatum.fields.length === 6) {
+          datum = {
+            student: parsedDatum.fields[0].bytes,
+            mentor: parsedDatum.fields[1].bytes,
+            platform: parsedDatum.fields[2].bytes,
+            amount: Number(parsedDatum.fields[3].int),
+            progress: Number(parsedDatum.fields[4].int),
+            partial_claimed: parsedDatum.fields[5].constructor === 1n,
+          };
+          console.log("[CSL] Parsed fresh datum from UTxO inline datum");
+          console.log("[CSL] Fresh datum:", JSON.stringify(datum));
+        }
+      } catch (e) {
+        console.warn("[CSL] Could not parse inline datum, using passed datum");
+      }
+    }
 
     // Verify Mentor is the caller
     if (mentorPkh !== datum.mentor) {
@@ -343,21 +406,26 @@ export const claimFundsCSL = async ({
     // Calculate outputs based on action type
     const utxoValue = Number(scriptUtxo.output.amount[0].quantity);
     const minUtxo = 2_000_000; // Minimum UTxO for Cardano
+    const feeBuffer = 1_000_000; // 1 ADA fee buffer (deducted from mentor)
     
     if (action === "PartialClaim") {
-      // PartialClaim: 30% to mentor, 70% back to script
-      const mentorAmount = Math.floor(utxoValue * 0.3);
-      const remainingAmount = utxoValue - mentorAmount;
+      // PartialClaim: 30% to mentor (minus fee), 70% back to script (full)
+      const mentorAmountRaw = Math.floor(utxoValue * 0.3);
+      const mentorAmount = mentorAmountRaw - feeBuffer; // Mentor pays fee
+      const remainingAmount = utxoValue - mentorAmountRaw; // Full 70% back to script
       
-      console.log("[CSL] PartialClaim distribution:");
-      console.log("[CSL]   Mentor gets 30%:", mentorAmount / 1_000_000, "ADA");
-      console.log("[CSL]   Remaining 70%:", remainingAmount / 1_000_000, "ADA");
+      console.log("[CSL] PartialClaim distribution (mentor pays fee):");
+      console.log("[CSL]   Mentor gets (30% - fee):", mentorAmount / 1_000_000, "ADA");
+      console.log("[CSL]   Remaining 70% (full):", remainingAmount / 1_000_000, "ADA");
       
-      // Output to mentor (30%)
+      // Output to mentor (30% - fee)
       tx.txOut(mentorAddr, [{ unit: "lovelace", quantity: mentorAmount.toString() }]);
       
       // Output remaining back to script with updated datum
-      const correctAddress = getCorrectScriptAddress(0);
+      // IMPORTANT: Return to SAME address as input (for validator to verify)
+      const returnAddress = scriptUtxo.output.address;
+      console.log("[CSL] Returning to original address:", returnAddress);
+      
       const updatedDatum: EduDatum = {
         ...datum,
         partial_claimed: true, // Mark as partial claimed
@@ -371,15 +439,23 @@ export const claimFundsCSL = async ({
         updatedDatum.partial_claimed ? mConStr1([]) : mConStr0([]),
       ]);
       
-      tx.txOut(correctAddress, [{ unit: "lovelace", quantity: remainingAmount.toString() }])
+      tx.txOut(returnAddress, [{ unit: "lovelace", quantity: remainingAmount.toString() }])
         .txOutInlineDatumValue(updatedDatumData);
       
-      console.log("[CSL] Returning 70% to script at:", correctAddress);
+      console.log("[CSL] Output datum updated with partial_claimed = true");
       
     } else {
-      // FinalClaim: 60% to mentor, 40% to platform
-      const mentorAmount = Math.floor(utxoValue * 0.6);
-      const platformAmount = utxoValue - mentorAmount;
+      // FinalClaim: 60% of remaining to mentor (minus fee), 40% to platform (full)
+      // IMPORTANT: Calculate same way as validator to match expected outputs
+      const remaining = datum.partial_claimed ? 70 : 100;
+      const mentorAmountRaw = Math.floor((datum.amount * remaining * 60) / 10000);
+      const mentorAmount = mentorAmountRaw - feeBuffer; // Mentor pays fee
+      const platformAmount = Math.floor((datum.amount * remaining * 40) / 10000); // Platform gets full 40%
+      
+      console.log("[CSL] FinalClaim calculation (mentor pays fee):");
+      console.log("[CSL]   Original amount:", datum.amount / 1_000_000, "ADA");
+      console.log("[CSL]   Partial claimed:", datum.partial_claimed);
+      console.log("[CSL]   Remaining %:", remaining);
       
       // Get platform address
       const platformAddr = process.env.NEXT_PUBLIC_PLATFORM_WALLET_ADDRESS;
@@ -388,13 +464,13 @@ export const claimFundsCSL = async ({
       }
       
       console.log("[CSL] FinalClaim distribution:");
-      console.log("[CSL]   Mentor gets 60%:", mentorAmount / 1_000_000, "ADA");
-      console.log("[CSL]   Platform gets 40%:", platformAmount / 1_000_000, "ADA");
+      console.log("[CSL]   Mentor gets (60% - fee):", mentorAmount / 1_000_000, "ADA");
+      console.log("[CSL]   Platform gets (full 40%):", platformAmount / 1_000_000, "ADA");
       
-      // Output to mentor (60%)
+      // Output to mentor
       tx.txOut(mentorAddr, [{ unit: "lovelace", quantity: mentorAmount.toString() }]);
       
-      // Output to platform (40%)
+      // Output to platform
       tx.txOut(platformAddr, [{ unit: "lovelace", quantity: platformAmount.toString() }]);
     }
 
@@ -428,14 +504,38 @@ export const claimFundsCSL = async ({
     
     console.log("[CSL] Submitting to blockchain...");
 
-    const txHash = await wallet.submitTx(signedTx);
-    
-    console.log("╔════════════════════════════════════════╗");
-    console.log("║  CSL CLAIM SUCCESSFUL                  ║");
-    console.log("╚════════════════════════════════════════╝");
-    console.log("[CSL] TX Hash:", txHash);
+    try {
+      const txHash = await wallet.submitTx(signedTx);
+      
+      console.log("╔════════════════════════════════════════╗");
+      console.log("║  CSL CLAIM SUCCESSFUL                  ║");
+      console.log("╚════════════════════════════════════════╝");
+      console.log("[CSL] TX Hash:", txHash);
 
-    return txHash;
+      return txHash;
+    } catch (submitError: any) {
+      // Try to decode the error message for more details
+      console.error("[CSL] Submit error details:", JSON.stringify(submitError, null, 2));
+      
+      // Try to extract the actual error from Blockfrost
+      if (submitError.info) {
+        try {
+          // Parse nested JSON error
+          const parsed = JSON.parse(submitError.info.replace('BAD_REQUEST (', '').replace(/\)$/, ''));
+          console.error("[CSL] Blockfrost error:", JSON.stringify(parsed, null, 2));
+          
+          // Try to parse the inner message
+          if (parsed.message) {
+            const innerMessage = JSON.parse(parsed.message);
+            console.error("[CSL] Inner error:", JSON.stringify(innerMessage, null, 2));
+          }
+        } catch (parseErr) {
+          console.error("[CSL] Could not parse error details");
+        }
+      }
+      
+      throw submitError;
+    }
   } catch (error) {
     console.error("╔════════════════════════════════════════╗");
     console.error("║  CSL CLAIM FAILED                      ║");
