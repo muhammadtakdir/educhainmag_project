@@ -8,8 +8,7 @@ import { getUserProgress, checkContentAccess, grantContentAccess, getAccessDetai
 import { Spinner, Alert, Container, Row, Col, Card, Button, ListGroup, ProgressBar, Modal } from 'react-bootstrap';
 import { Module, Lesson, UserProgress, Certificate } from '@/types';
 
-
-import { initiateEscrow } from '@/lib/cardano/escrow';
+import { initiateEscrowCSL } from '@/lib/cardano/escrow-csl';
 import QuizPlayer from '@/components/course/QuizPlayer'; // Import the QuizPlayer
 import { FaCheckCircle, FaLock } from 'react-icons/fa';
 
@@ -335,7 +334,7 @@ export default function ModulePage({ params }: { params: { moduleId: string } })
 
 
   const handlePayment = async () => {
-    if (!connected || !module || !module.priceAda || !userId) return;
+    if (!connected || !module || !module.priceAda || !userId || !wallet) return;
 
     setPaymentProcessing(true);
     setError(null);
@@ -343,15 +342,22 @@ export default function ModulePage({ params }: { params: { moduleId: string } })
     try {
       const priceLovelace = module.priceAda * 1_000_000;
 
-      const txHash = await initiateEscrow({
-        wallet,
+      console.log("[PAYMENT] Creating escrow using MeshJS (client-side) with correct hash...");
+      console.log("[PAYMENT] Mentor:", module.contentProviderId);
+      console.log("[PAYMENT] Student:", userId);
+      console.log("[PAYMENT] Amount:", priceLovelace, "lovelace");
+      
+      // Use initiateEscrowCSL which uses MeshJS but sends to CORRECT address
+      const txHash = await initiateEscrowCSL({
+        wallet: wallet,
         mentorAddr: module.contentProviderId!,
         studentAddr: userId!,
         amount: priceLovelace,
       });
 
-      // The initiateEscrow function handles the initiation and submission
-      // We just need to grant content access based on the successful creation.
+      console.log("[PAYMENT] Escrow created successfully:", txHash);
+      
+      // Grant content access based on the successful creation.
       await grantContentAccess(userId!, moduleId, txHash);
       setHasAccess(true);
 
