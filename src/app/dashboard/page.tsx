@@ -198,11 +198,19 @@ export default function DashboardPage() {
               if (studentUser) {
                 console.log("[ESCROW] Student found:", studentUser.displayName);
                 
-                // Match module by price
+                // Try to match module - first by price, then by any progress
                 const escrowAda = escrow.datum.amount / 1_000_000;
                 console.log("[ESCROW] Escrow amount in ADA:", escrowAda);
-                const candidates = currentModules.filter(m => m.priceAda === escrowAda);
+                
+                // First try: match by price
+                let candidates = currentModules.filter(m => m.priceAda === escrowAda);
                 console.log("[ESCROW] Matching modules by price:", candidates.length);
+                
+                // Fallback: if no price match, check ALL modules for student progress
+                if (candidates.length === 0) {
+                  console.log("[ESCROW] No price match, checking all mentor modules for student progress");
+                  candidates = currentModules;
+                }
                 
                 for (const cand of candidates) {
                   try {

@@ -340,9 +340,63 @@ export const claimFundsCSL = async ({
     tx.requiredSignerHash(mentorPkh);
     console.log("[CSL] Added required signer:", mentorPkh);
 
-    // Output to mentor
+    // Calculate outputs based on action type
     const utxoValue = Number(scriptUtxo.output.amount[0].quantity);
-    tx.txOut(mentorAddr, [{ unit: "lovelace", quantity: utxoValue.toString() }]);
+    const minUtxo = 2_000_000; // Minimum UTxO for Cardano
+    
+    if (action === "PartialClaim") {
+      // PartialClaim: 30% to mentor, 70% back to script
+      const mentorAmount = Math.floor(utxoValue * 0.3);
+      const remainingAmount = utxoValue - mentorAmount;
+      
+      console.log("[CSL] PartialClaim distribution:");
+      console.log("[CSL]   Mentor gets 30%:", mentorAmount / 1_000_000, "ADA");
+      console.log("[CSL]   Remaining 70%:", remainingAmount / 1_000_000, "ADA");
+      
+      // Output to mentor (30%)
+      tx.txOut(mentorAddr, [{ unit: "lovelace", quantity: mentorAmount.toString() }]);
+      
+      // Output remaining back to script with updated datum
+      const correctAddress = getCorrectScriptAddress(0);
+      const updatedDatum: EduDatum = {
+        ...datum,
+        partial_claimed: true, // Mark as partial claimed
+      };
+      const updatedDatumData = mConStr0([
+        updatedDatum.student,
+        updatedDatum.mentor,
+        updatedDatum.platform,
+        updatedDatum.amount,
+        updatedDatum.progress,
+        updatedDatum.partial_claimed ? mConStr1([]) : mConStr0([]),
+      ]);
+      
+      tx.txOut(correctAddress, [{ unit: "lovelace", quantity: remainingAmount.toString() }])
+        .txOutInlineDatumValue(updatedDatumData);
+      
+      console.log("[CSL] Returning 70% to script at:", correctAddress);
+      
+    } else {
+      // FinalClaim: 60% to mentor, 40% to platform
+      const mentorAmount = Math.floor(utxoValue * 0.6);
+      const platformAmount = utxoValue - mentorAmount;
+      
+      // Get platform address
+      const platformAddr = process.env.NEXT_PUBLIC_PLATFORM_WALLET_ADDRESS;
+      if (!platformAddr) {
+        throw new Error("Platform wallet address not configured");
+      }
+      
+      console.log("[CSL] FinalClaim distribution:");
+      console.log("[CSL]   Mentor gets 60%:", mentorAmount / 1_000_000, "ADA");
+      console.log("[CSL]   Platform gets 40%:", platformAmount / 1_000_000, "ADA");
+      
+      // Output to mentor (60%)
+      tx.txOut(mentorAddr, [{ unit: "lovelace", quantity: mentorAmount.toString() }]);
+      
+      // Output to platform (40%)
+      tx.txOut(platformAddr, [{ unit: "lovelace", quantity: platformAmount.toString() }]);
+    }
 
     // Finalize
     tx.changeAddress(changeAddr);
