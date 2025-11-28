@@ -1,0 +1,138 @@
+{
+  "preamble": {
+    "title": "takdir/edu_escrow",
+    "description": "Aiken contracts for project 'takdir/edu_escrow'",
+    "version": "0.0.0",
+    "plutusVersion": "v3",
+    "compiler": {
+      "name": "Aiken",
+      "version": "v1.1.19+e525483"
+    },
+    "license": "Apache-2.0"
+  },
+  "validators": [
+    {
+      "title": "edu_escrow.edu_escrow.spend",
+      "datum": {
+        "title": "datum",
+        "schema": {
+          "$ref": "#/definitions/edu_escrow~1EduDatum"
+        }
+      },
+      "redeemer": {
+        "title": "redeemer",
+        "schema": {
+          "$ref": "#/definitions/edu_escrow~1EduRedeemer"
+        }
+      },
+      "compiledCode": "5901b001010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cdc3a400530070024888966002600460106ea800e26466446644b30013003300d3754013132323259800980a00144c8c966002601000315980098099baa002803c590144566002601800315980098099baa002803c5901445901120223011375400260260071640486eb4c048004c048004c038dd5004c5900c0acc004c004c02cdd5001466002601c60186ea800a4601e60200032300f30103010301030103010301030103010001911919800800801912cc00400629422b30013371e6eb8c04800400e29462660040046026002807101124444b30013005300f3754602460206ea802e2b3001330013758600460206ea8020dd7180198081baa0048acc004cdc4a40c86eb4c00cc040dd5005c660026012601e6ea8c048c04cc04cc04cc04cc04cc040dd5002528528a01c8a50403914a080722b3001330013758600460206ea8020dd7180198081baa004899b894832004dd6980198081baa00b8a5040388071164028601c0066018601a0026e1d20003009375400716401c30070013003375400f149a26cac80081",
+      "hash": "47be01b4e6535eff63f75202295fc81afb1b80635e0b3c55d110ec61"
+    },
+    {
+      "title": "edu_escrow.edu_escrow.else",
+      "redeemer": {
+        "schema": {}
+      },
+      "compiledCode": "5901b001010029800aba2aba1aab9faab9eaab9dab9a48888896600264653001300700198039804000cdc3a400530070024888966002600460106ea800e26466446644b30013003300d3754013132323259800980a00144c8c966002601000315980098099baa002803c590144566002601800315980098099baa002803c5901445901120223011375400260260071640486eb4c048004c048004c038dd5004c5900c0acc004c004c02cdd5001466002601c60186ea800a4601e60200032300f30103010301030103010301030103010001911919800800801912cc00400629422b30013371e6eb8c04800400e29462660040046026002807101124444b30013005300f3754602460206ea802e2b3001330013758600460206ea8020dd7180198081baa0048acc004cdc4a40c86eb4c00cc040dd5005c660026012601e6ea8c048c04cc04cc04cc04cc04cc040dd5002528528a01c8a50403914a080722b3001330013758600460206ea8020dd7180198081baa004899b894832004dd6980198081baa00b8a5040388071164028601c0066018601a0026e1d20003009375400716401c30070013003375400f149a26cac80081",
+      "hash": "47be01b4e6535eff63f75202295fc81afb1b80635e0b3c55d110ec61"
+    }
+  ],
+  "definitions": {
+    "Bool": {
+      "title": "Bool",
+      "anyOf": [
+        {
+          "title": "False",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "True",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "ByteArray": {
+      "dataType": "bytes"
+    },
+    "Int": {
+      "dataType": "integer"
+    },
+    "edu_escrow/EduAction": {
+      "title": "EduAction",
+      "anyOf": [
+        {
+          "title": "PartialClaim",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": []
+        },
+        {
+          "title": "FinalClaim",
+          "dataType": "constructor",
+          "index": 1,
+          "fields": []
+        }
+      ]
+    },
+    "edu_escrow/EduDatum": {
+      "title": "EduDatum",
+      "anyOf": [
+        {
+          "title": "EduDatum",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "student",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "mentor",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "platform",
+              "$ref": "#/definitions/ByteArray"
+            },
+            {
+              "title": "amount",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "progress",
+              "$ref": "#/definitions/Int"
+            },
+            {
+              "title": "partial_claimed",
+              "$ref": "#/definitions/Bool"
+            }
+          ]
+        }
+      ]
+    },
+    "edu_escrow/EduRedeemer": {
+      "title": "EduRedeemer",
+      "anyOf": [
+        {
+          "title": "EduRedeemer",
+          "dataType": "constructor",
+          "index": 0,
+          "fields": [
+            {
+              "title": "action",
+              "$ref": "#/definitions/edu_escrow~1EduAction"
+            },
+            {
+              "title": "progress",
+              "$ref": "#/definitions/Int"
+            }
+          ]
+        }
+      ]
+    }
+  }
+}
