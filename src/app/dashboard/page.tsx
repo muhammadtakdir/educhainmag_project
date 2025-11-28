@@ -10,22 +10,38 @@ import { getCertificateByUserAndModule } from '@/lib/firebase/certificates';
 import { getUserById, updateUserDisplayName, getUsersWithProgress } from '@/lib/firebase/users';
 import { getUserProgress } from '@/lib/firebase/access';
 import { Module, UserProgress, Lesson, ContentProvider, Certificate, User } from '@/types';
-import { Alert, Spinner, Button, ProgressBar, Accordion, ListGroup, Form, InputGroup, Card, Modal, Table } from 'react-bootstrap';
-import { getEscrowUtxos, claimFunds, EduDatum } from '@/lib/cardano/escrow';
-import { UTxO } from '@meshsdk/common';
+import { Alert, Spinner, Button, ProgressBar, Accordion, ListGroup, Form, InputGroup, Card, Modal, Table, Badge } from 'react-bootstrap';
+import { EduDatum, MESHJS_BUG_INFO } from '@/lib/cardano/escrow';
+import { claimFundsCSL } from '@/lib/cardano/escrow-csl';
 import { resolvePaymentKeyHash } from '@meshsdk/core';
+
+// API-based escrow addresses
+const CORRECT_SCRIPT_ADDRESS = "addr_test1wprmuqd5uef4almr7afqy22leqd0kxuqvd0qk0z46ygwccgjj5d2u";
+const OLD_SCRIPT_ADDRESS = "addr_test1wrvqe3g6vnsp27ckv073qz8785rzxl38pyjdyga40l4k5ysj73xxt";
 
 interface ProgressWithModule extends UserProgress {
   module: Module;
   certificate?: Certificate | null;
 }
 
+// API response UTxO format
+interface ApiUtxo {
+  txHash: string;
+  outputIndex: number;
+  address: string;
+  amount: Array<{ unit: string; quantity: string }>;
+  datumHash?: string;
+  inlineDatumCbor?: string; // CBOR hex from Blockfrost inline_datum
+  datumJson?: any;
+}
+
 interface EscrowDisplay {
-  utxo: UTxO;
+  utxo: ApiUtxo;
   datum: EduDatum;
   studentName?: string;
   moduleTitle?: string;
   progressPercent: number;
+  isLocked: boolean; // TRUE if this escrow uses old MeshJS hash (unspendable)
 }
 
 export default function DashboardPage() {
@@ -136,110 +152,95 @@ export default function DashboardPage() {
         setMyModules(userModules);
         currentModules = userModules;
         
-        // Fetch Escrows Logic
+        // Fetch Escrows Logic using API route (avoids CORS issues)
         setLoadingEscrows(true);
         try {
-          const myEscrows = await getEscrowUtxos(userId);
-          const { usersWithProgress } = await getUsersWithProgress();
-          const allUserProgress = await getAllUserProgress(userId); // This gets MY progress, not others. Need ALL progress.
-          // Actually, getAllUserProgress is filtered by userId in the function definition usually.
-          // We need a way to find the student's progress for specific module.
+          console.log("[ESCROW] Fetching escrows for mentor via API:", userId);
           
-          // Need to fetch ALL user progress or just specific ones?
-          // Firestore makes it hard to query "all progress for my modules".
-          // But we have usersWithProgress (Users). We can iterate them.
-          
-          // Optimization: First map PKH to UserID
-          const pkhToUserMap = new Map<string, User>();
-          for (const user of usersWithProgress) {
-            try {
-              const pkh = resolvePaymentKeyHash(user.walletAddress);
-              pkhToUserMap.set(pkh, user);
-            } catch (e) {
-              console.warn("Invalid address for user:", user.walletAddress);
-            }
+          // Call API route to get escrows (server-side Blockfrost)
+          const response = await fetch(`/api/escrow?mentor=${encodeURIComponent(userId)}`);
+          if (!response.ok) {
+            throw new Error(`API error: ${response.status}`);
           }
+          const data = await response.json();
+          const allEscrows = data.escrows || [];
+          
+          console.log("[ESCROW] Old escrows (LOCKED):", data.locked);
+          console.log("[ESCROW] New escrows (claimable):", data.claimable);
+          console.log("[ESCROW] Total escrows:", data.total);
+          
+          if (allEscrows.length === 0) {
+            console.log("[ESCROW] No escrows found");
+            setEscrows([]);
+          } else {
+            const { usersWithProgress } = await getUsersWithProgress();
+            console.log("[ESCROW] Fetched users with progress:", usersWithProgress.length);
+            
+            // Map PKH to User
+            const pkhToUserMap = new Map<string, User>();
+            for (const user of usersWithProgress) {
+              try {
+                const pkh = resolvePaymentKeyHash(user.walletAddress);
+                pkhToUserMap.set(pkh, user);
+              } catch (e) {
+                console.warn("[ESCROW] Invalid address for user:", user.walletAddress);
+              }
+            }
 
-          const displayEscrows: EscrowDisplay[] = [];
-          
-          for (const escrow of myEscrows) {
-            const studentUser = pkhToUserMap.get(escrow.datum.student);
-            let progressPercent = 0;
-            let moduleTitle = "Unknown Module";
+            const displayEscrows: EscrowDisplay[] = [];
             
-            // We don't have moduleId in Datum (only amount).
-            // We can try to match by amount if unique, but price might be same.
-            // Wait, we need to know which module this is for to check progress.
-            // The contract doesn't store moduleId.
-            // But we can deduce it? 
-            // If we check the student's progress in ALL of MY modules.
-            // If they have started one, we assume the escrow is for that one.
-            // (Corner case: Student buys 2 modules with same price from same author).
-            
-            if (studentUser) {
-               // Check progress for each of my modules
-               for (const mod of currentModules) {
-                 // We need to fetch this student's progress for this module
-                 // Using a helper or direct query
-                 // Since we don't have a direct function here, let's assume we can't easily get it without a new query.
-                 // But we can skip efficient querying for now and just use what we have.
-                 
-                 // We'll add a new helper or just fetch it here.
-                 // Let's use the existing `getUserProgress` but we need to import it.
-                 // Oh, I need to import `getUserProgress` from access.
-                 // Let's just mark it as TODO or assume we can get it.
-                 // I will fetch all progress for this user in the loop (not efficient but works for prototype).
-               }
+            for (const escrow of allEscrows) {
+              console.log("[ESCROW] Processing escrow with amount:", escrow.datum.amount);
+              const studentUser = pkhToUserMap.get(escrow.datum.student);
+              let progressPercent = 0;
+              let moduleTitle = "Unknown Module";
+              
+              if (studentUser) {
+                console.log("[ESCROW] Student found:", studentUser.displayName);
+                
+                // Match module by price
+                const escrowAda = escrow.datum.amount / 1_000_000;
+                console.log("[ESCROW] Escrow amount in ADA:", escrowAda);
+                const candidates = currentModules.filter(m => m.priceAda === escrowAda);
+                console.log("[ESCROW] Matching modules by price:", candidates.length);
+                
+                for (const cand of candidates) {
+                  try {
+                    const progress = await getUserProgress(studentUser.walletAddress, cand.id);
+                    if (progress) {
+                      console.log("[ESCROW] Progress found for module:", cand.title, "Completed lessons:", progress.completedLessons.length);
+                      moduleTitle = cand.title;
+                      const totalLessons = cand.lessons?.length || 1;
+                      progressPercent = (progress.completedLessons.length / totalLessons) * 100;
+                      
+                      if (progress.status === 'completed') {
+                        progressPercent = 100;
+                      }
+                      break;
+                    }
+                  } catch (e) {
+                    console.error("[ESCROW] Error fetching progress:", e);
+                  }
+                }
+              }
+              
+              console.log("[ESCROW] Final escrow display - Student:", studentUser?.displayName, "Module:", moduleTitle, "Progress:", Math.floor(progressPercent) + "%");
+              
+              displayEscrows.push({
+                utxo: escrow.utxo,
+                datum: escrow.datum,
+                studentName: studentUser?.displayName || "Unknown Student",
+                moduleTitle: moduleTitle,
+                progressPercent: Math.floor(progressPercent),
+                isLocked: escrow.isLocked
+              });
             }
-            
-            // REVISION: I need to import `getUserProgress`
-            // And I need to determine which module it is.
-            // If I can't determine the module, I can't determine progress.
-            // However, if the student has ANY progress > 0 in ONE of my modules, likely that's it.
-            
-            let matchedModule: Module | undefined;
-            
-            if (studentUser) {
-               // Find which module they are enrolled in that matches the price (datum.amount)
-               // datum.amount is in Lovelace.
-               const escrowAda = escrow.datum.amount / 1_000_000;
-               
-               // Candidates
-               const candidates = currentModules.filter(m => m.priceAda === escrowAda);
-               
-               for (const cand of candidates) {
-                 try {
-                   const progress = await getUserProgress(studentUser.walletAddress, cand.id);
-                   if (progress) {
-                     moduleTitle = cand.title;
-                     const totalLessons = cand.lessons?.length || 1;
-                     progressPercent = (progress.completedLessons.length / totalLessons) * 100;
-                     
-                     // If status is completed, force 100%
-                     if (progress.status === 'completed') {
-                       progressPercent = 100;
-                     }
-                     break; // Found the matching module
-                   }
-                 } catch (e) {
-                   console.error("Error fetching progress for escrow check:", e);
-                 }
-               }
-            }
-            
-            displayEscrows.push({
-              utxo: escrow.utxo,
-              datum: escrow.datum,
-              studentName: studentUser?.displayName || "Unknown Student",
-              moduleTitle: moduleTitle,
-              progressPercent: Math.floor(progressPercent)
-            });
+            setEscrows(displayEscrows);
           }
-          // Setting partial implementation for now, will refine in next step with imports
-          setEscrows(displayEscrows);
 
         } catch (err) {
-          console.error("Error fetching escrows:", err);
+          console.error("[ESCROW] Error fetching escrows:", err);
+          setError(`Failed to load escrows: ${err instanceof Error ? err.message : "Unknown error"}`);
         } finally {
           setLoadingEscrows(false);
         }
@@ -363,21 +364,71 @@ export default function DashboardPage() {
   };
 
   const handleClaim = async (escrow: EscrowDisplay, action: "PartialClaim" | "FinalClaim") => {
-    if (!wallet || !connected) return;
+    if (!wallet || !connected || !userAddress) {
+      alert("Please connect your wallet first");
+      return;
+    }
+    
+    // Check if escrow is locked
+    if (escrow.isLocked) {
+      alert("❌ Cannot claim!\n\nThis escrow is PERMANENTLY LOCKED due to MeshJS PlutusV3 bug.\n\nSee MESHJS_BUG_REPORT.md for details.");
+      return;
+    }
+    
+    console.log("[CLAIM] Starting claim process (client-side CSL)");
+    console.log("[CLAIM] Action:", action);
+    console.log("[CLAIM] Progress:", escrow.progressPercent);
+    
     setClaiming(true);
     try {
-      await claimFunds({
+      // Determine actual progress based on action
+      let actualProgress = 0;
+      if (action === "PartialClaim") {
+        if (escrow.progressPercent < 50) {
+          throw new Error("Progress must be at least 50% to claim partial payment");
+        }
+        actualProgress = 50;
+      } else if (action === "FinalClaim") {
+        if (escrow.progressPercent < 100) {
+          throw new Error("Progress must be 100% to claim final payment");
+        }
+        actualProgress = 100;
+      }
+      
+      console.log("[CLAIM] Using claimFundsCSL (client-side)...");
+      
+      // Convert API UTxO format to MeshJS UTxO format
+      const meshUtxo = {
+        input: {
+          txHash: escrow.utxo.txHash,
+          outputIndex: escrow.utxo.outputIndex,
+        },
+        output: {
+          address: escrow.utxo.address,
+          amount: escrow.utxo.amount,
+          plutusData: escrow.utxo.inlineDatumCbor, // CBOR hex from API
+        },
+      };
+      
+      console.log("[CLAIM] UTxO prepared:", meshUtxo.input.txHash);
+      console.log("[CLAIM] Datum CBOR:", escrow.utxo.inlineDatumCbor?.substring(0, 50) + "...");
+      console.log("[CLAIM] Datum parsed:", escrow.datum);
+      
+      // Call claimFundsCSL directly (client-side)
+      const txHash = await claimFundsCSL({
         wallet,
-        scriptUtxo: escrow.utxo,
+        scriptUtxo: meshUtxo as any,
         datum: escrow.datum,
         action,
-        currentProgress: action === "PartialClaim" ? 50 : 100
+        currentProgress: actualProgress,
       });
-      alert("Claim Successful!");
+      
+      console.log("[CLAIM] Transaction submitted successfully:", txHash);
+      alert(`✓ Claim Successful!\nTransaction: ${txHash}`);
       fetchDashboardData();
     } catch (err) {
-      console.error("Claim failed:", err);
-      alert("Claim failed. See console.");
+      console.error("[CLAIM] Claim failed:", err);
+      alert(`✗ Claim Failed!\n${err instanceof Error ? err.message : "Unknown error"}`);
     } finally {
       setClaiming(false);
     }
@@ -500,54 +551,89 @@ export default function DashboardPage() {
           ) : escrows.length === 0 ? (
             <Alert variant="secondary">No active escrows found.</Alert>
           ) : (
-            <Table striped bordered hover variant="dark">
-              <thead>
-                <tr>
-                  <th>Student</th>
-                  <th>Module (Est.)</th>
-                  <th>Amount (ADA)</th>
-                  <th>Progress</th>
-                  <th>Status</th>
-                  <th>Action</th>
-                </tr>
-              </thead>
-              <tbody>
-                {escrows.map((escrow, i) => (
-                  <tr key={i}>
-                    <td>{escrow.studentName}</td>
-                    <td>{escrow.moduleTitle}</td>
-                    <td>{escrow.datum.amount / 1000000}</td>
-                    <td>{escrow.progressPercent}%</td>
-                    <td>
-                      {escrow.datum.partial_claimed ? "Partial Claimed" : "Initial"}
-                    </td>
-                    <td>
-                      {!escrow.datum.partial_claimed && escrow.progressPercent >= 50 && (
-                        <Button 
-                          size="sm" 
-                          variant="warning" 
-                          onClick={() => handleClaim(escrow, "PartialClaim")}
-                          disabled={claiming}
-                        >
-                          Claim 30%
-                        </Button>
-                      )}
-                      {escrow.progressPercent >= 100 && (
-                        <Button 
-                          size="sm" 
-                          variant="success" 
-                          className="ms-2"
-                          onClick={() => handleClaim(escrow, "FinalClaim")}
-                          disabled={claiming}
-                        >
-                          Claim Final
-                        </Button>
-                      )}
-                    </td>
+            <>
+              {escrows.some(e => e.isLocked) && (
+                <Alert variant="danger" className="mb-3">
+                  <strong>⚠️ MeshJS Bug Detected:</strong> Some escrows are locked due to a bug in MeshJS library 
+                  that produces incorrect PlutusV3 script hashes. These funds cannot be claimed until the bug is fixed.
+                  <br/>
+                  <small className="text-muted">
+                    Affected hash: {MESHJS_BUG_INFO.oldHash} (should be: {MESHJS_BUG_INFO.correctHash})
+                  </small>
+                </Alert>
+              )}
+              <Table striped bordered hover variant="dark">
+                <thead>
+                  <tr>
+                    <th>Student</th>
+                    <th>Module (Est.)</th>
+                    <th>Amount (ADA)</th>
+                    <th>Progress</th>
+                    <th>Status</th>
+                    <th>Action</th>
                   </tr>
-                ))}
-              </tbody>
-            </Table>
+                </thead>
+                <tbody>
+                  {escrows.map((escrow, i) => (
+                    <tr key={i} className={escrow.isLocked ? 'table-danger' : ''}>
+                      <td>{escrow.studentName}</td>
+                      <td>{escrow.moduleTitle}</td>
+                      <td>{escrow.datum.amount / 1000000}</td>
+                      <td>{escrow.progressPercent}%</td>
+                      <td>
+                        {escrow.isLocked ? (
+                          <Badge bg="danger">🔒 LOCKED (MeshJS Bug)</Badge>
+                        ) : escrow.datum.partial_claimed ? (
+                          <Badge bg="warning">Partial Claimed</Badge>
+                        ) : (
+                          <Badge bg="info">Initial</Badge>
+                        )}
+                      </td>
+                      <td>
+                        {escrow.isLocked ? (
+                          <span className="text-muted small">Cannot claim - funds locked</span>
+                        ) : (
+                          <>
+                            {/* Partial Claim Button - available at 50%+ progress, if not already claimed */}
+                            {!escrow.datum.partial_claimed && (
+                              <Button 
+                                size="sm" 
+                                variant="warning" 
+                                onClick={() => handleClaim(escrow, "PartialClaim")}
+                                disabled={claiming || escrow.progressPercent < 50}
+                                title={escrow.progressPercent < 50 ? `Need 50% progress (currently ${escrow.progressPercent}%)` : "Claim 30% of escrow"}
+                              >
+                                {escrow.progressPercent < 50 ? `🔒 Claim 30% (need 50%)` : "Claim 30%"}
+                              </Button>
+                            )}
+                            {escrow.datum.partial_claimed && escrow.progressPercent < 100 && (
+                              <span className="text-muted small">Partial claimed, waiting for 100%</span>
+                            )}
+                            {/* Final Claim Button - available at 100% progress */}
+                            {escrow.datum.partial_claimed && (
+                              <Button 
+                                size="sm" 
+                                variant="success" 
+                                className="ms-2"
+                                onClick={() => handleClaim(escrow, "FinalClaim")}
+                                disabled={claiming || escrow.progressPercent < 100}
+                                title={escrow.progressPercent < 100 ? `Need 100% progress (currently ${escrow.progressPercent}%)` : "Claim remaining funds"}
+                              >
+                                {escrow.progressPercent < 100 ? `🔒 Claim Final (need 100%)` : "Claim Final"}
+                              </Button>
+                            )}
+                            {/* Show message if both conditions not met yet */}
+                            {!escrow.datum.partial_claimed && escrow.progressPercent < 50 && (
+                              <span className="text-muted small d-block mt-1">Student progress: {escrow.progressPercent}%</span>
+                            )}
+                          </>
+                        )}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </Table>
+            </>
           )}
           
           {myModules.length === 0 ? (
