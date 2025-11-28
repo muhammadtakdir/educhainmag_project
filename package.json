@@ -10,10 +10,13 @@
   },
   "dependencies": {
     "@emurgo/cardano-serialization-lib-asmjs": "^15.0.1",
+    "@emurgo/cardano-serialization-lib-browser": "^15.0.3",
     "@emurgo/cardano-serialization-lib-nodejs": "^15.0.1",
     "@meshsdk/contract": "^1.9.0-beta.86",
     "@meshsdk/core": "^1.9.0-beta.86",
     "@meshsdk/react": "^1.9.0-beta.86",
+    "bech32": "^2.0.0",
+    "blakejs": "^1.2.1",
     "bootstrap": "^5.3.8",
     "firebase": "^12.4.0",
     "libsodium-wrappers": "^0.7.13",
